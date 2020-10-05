@@ -90,7 +90,7 @@ class adap_layer_feat4(nn.Module):
             nn.BatchNorm2d(2048),
             nn.ReLU()
         )
-            
+
     def forward(self, feature):
         feature = feature + self.conv1(feature)
         feature = feature + self.conv2(feature)
@@ -269,7 +269,7 @@ class SFNet(nn.Module):
             grid_S2T, flow_S2T = self.find_correspondence(corr_S2T)
             grid_T2S, flow_T2S = self.find_correspondence(corr_T2S)
             
-            return {'grid_S2T':grid_S2T, 'grid_T2S':grid_T2S, 'flow_S2T':flow_S2T, 'flow_T2S':flow_T2S}        
+            return {'grid_S2T':grid_S2T, 'grid_T2S':grid_T2S, 'flow_S2T':flow_S2T, 'flow_T2S':flow_T2S,'corr_T2S': corr_T2S}
         else:
             # Establish correspondences
             grid_S2T, flow_S2T, smoothness_S2T = self.find_correspondence(corr_S2T, GT_src_mask)
@@ -288,4 +288,5 @@ class SFNet(nn.Module):
             return {'est_src_mask':warped_src_mask, 'smoothness_S2T':smoothness_S2T, 'grid_S2T':grid_S2T,
                     'est_tgt_mask':warped_tgt_mask, 'smoothness_T2S':smoothness_T2S, 'grid_T2S':grid_T2S, 
                     'flow_S2T':flow_S2T, 'flow_T2S':flow_T2S,
-                    'warped_flow_S2T':warped_flow_S2T, 'warped_flow_T2S':warped_flow_T2S}
+                    'warped_flow_S2T': warped_flow_S2T, 'warped_flow_T2S':warped_flow_T2S,
+                    'corr_T2S': corr_T2S}

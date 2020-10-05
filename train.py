@@ -5,19 +5,19 @@ import numpy as np
 import os
 import random
 from custom_dataset import Pascal_Seg_Synth, PF_Pascal
+from geek_dataset import PairAnimeDataset
 from custom_loss import loss_function
 from model import SFNet
-#import matplotlib.pyplot as plt
 import argparse
 
 parser = argparse.ArgumentParser(description="SFNet")
 parser.add_argument('--seed', type=int, default=None, help='random seed')
-parser.add_argument('--batch_size', type=int, default=16, help='mini-batch size for training')
+parser.add_argument('--batch_size', type=int, default=1, help='mini-batch size for training')
 parser.add_argument('--epochs', type=int, default=40, help='number of epochs for training')
 parser.add_argument('--lr', type=float, default=3e-5, help='learning rate')
 parser.add_argument('--gamma', type=float, default=0.2, help='decaying factor')
 parser.add_argument('--decay_schedule', type=str, default='30', help='learning rate decaying schedule')
-parser.add_argument('--num_workers', type=int, default=4, help='number of workers for data loader')
+parser.add_argument('--num_workers', type=int, default=0, help='number of workers for data loader')
 parser.add_argument('--feature_h', type=int, default=20, help='height of feature volume')
 parser.add_argument('--feature_w', type=int, default=20, help='width of feature volume')
 parser.add_argument('--train_image_path', type=str, default='./data/training_data/VOC2012_seg_img.npy', help='directory of pre-processed(.npy) images')
@@ -69,14 +69,24 @@ if not os.path.exists("./weights/"):
     os.mkdir("./weights/")
 
 # Data Loader
-train_dataset = Pascal_Seg_Synth(args.train_image_path, args.train_mask_path, args.feature_h, args.feature_w)
+root_dir = "/home/kan/Desktop/Cinnamon/tyler/hades_painting_version_github/full_data"
+w = 512
+h = 768
+image_size = (w, h) # (w, h)
+mean = [2.0, 7.0, 20.0, 20.0, 10.0, 0.0, 0.0, 0.0]
+std = [0.8, 2.0, 10.0, 10.0, 30.0, 20.0, 30.0, 1.0]
+mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
+std = np.array(std)[:, np.newaxis][:, np.newaxis]
+
+#train_dataset = Pascal_Seg_Synth(args.train_image_path, args.train_mask_path, args.feature_h, args.feature_w)
+train_dataset = PairAnimeDataset(root_dir, image_size, mean, std)
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=args.batch_size,
                                            shuffle=True,
                                            num_workers = args.num_workers,
                                            worker_init_fn = _init_fn)
 
-valid_dataset = PF_Pascal(args.valid_csv_path, args.valid_image_path, args.feature_h, args.feature_w, args.eval_type)
+valid_dataset = train_dataset #PF_Pascal(args.valid_csv_path, args.valid_image_path, args.feature_h, args.feature_w, args.eval_type)
 valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,
                                            batch_size=1,
                                            shuffle=False, num_workers = args.num_workers)
@@ -109,6 +119,8 @@ def correct_keypoints(source_points, warped_points, L_pck, alpha=0.1):
     pck = torch.mean(correct_points.float())
     return pck
 
+
+
 # Training
 best_pck = 0
 print('Training started')
@@ -126,6 +138,11 @@ for ep in range(args.epochs):
         GT_src_mask = batch['mask1'].to(device)
         GT_tgt_mask = batch['mask2'].to(device)
 
+        print (src_image.shape)
+        print (tgt_image.shape)
+        print (GT_src_mask.shape)
+        print (GT_tgt_mask.shape)
+
         output = net(src_image, tgt_image, GT_src_mask, GT_tgt_mask)
 
         optimizer.zero_grad()
@@ -137,6 +154,11 @@ for ep in range(args.epochs):
         log("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()), LOGGER_FILE)
     scheduler.step()
     log("Epoch %03d finished... Average loss : %5f\n"%(ep,total_loss/len(train_loader)), LOGGER_FILE)
+
+    torch.save({'state_dict1': net.adap_layer_feat3.state_dict(),
+                'state_dict2': net.adap_layer_feat4.state_dict()},
+               './weights/best_checkpoint.pt')
+    continue
 
     with torch.no_grad():
         log('Computing PCK@Validation set...', LOGGER_FILE)

@@ -7,7 +7,12 @@ import numpy as np
 import pandas as pd
 import torchvision.transforms.functional as TF
 import os
-    
+
+import matplotlib.pyplot as plt
+def imghsow(im):
+    plt.imshow(im)
+    plt.show()
+
 class Pascal_Seg_Synth(Dataset):
     def __init__(self, image_path, mask_path, feature_H, feature_W):
         
@@ -51,6 +56,9 @@ class Pascal_Seg_Synth(Dataset):
         if p < 0.5:
             image, mask = TF.hflip(image), TF.hflip(mask) # pair filp
 
+        imghsow(image)
+        imghsow(mask)
+
         image = self.image_transform1(image) # resize
         image1 = self.image_transform2(image).unsqueeze(0) # jitter -> image1
         image2 = self.image_transform2(image).unsqueeze(0) # jitter -> image2
@@ -69,7 +77,7 @@ class Pascal_Seg_Synth(Dataset):
 
         image1 = self.affine_transform(image1,affine1) # source image
         
-        mask = self.affine_transform(mask,affine1)
+        mask = self.affine_transform(mask, affine1)
         mask = self.affine_transform(mask, affine_inverse1) # convert truncated pixels to 0
 
         # generate target image/mask
@@ -90,7 +98,7 @@ class Pascal_Seg_Synth(Dataset):
         mask1 = self.affine_transform(mask, affine1) # source mask : convert truncated pixels to 0
 
         image1, image2, mask1, mask2 = image1.squeeze(0).data, image2.squeeze(0).data, mask1.squeeze(0).data, mask2.squeeze(0).data
-        
+
         mask1 = self.mask_transform2(mask1) # resize
         mask2 = self.mask_transform2(mask2) # resize
         mask1 = (mask1>0.1).float() # binarize
