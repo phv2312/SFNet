@@ -165,7 +165,7 @@ def compute_component_matrix_distance(mask_a, mask_b, grid_np, target_h, target_
     imgshow(mask_b_from_a)
 
     print ('debug_mask')
-    debug_mask = np.concatenate([mask_a, mask_b_from_a], axis=1)
+    debug_mask = np.concatenate([mask_a, mask_b_from_a, mask_b], axis=1)
     imgshow(debug_mask)
 
     #
@@ -201,16 +201,16 @@ net.to(device)
 
 # Load weights
 print("Load pre-trained weights")
-best_weights = torch.load("./weights/best_checkpoint_geek_train_full.pt")
+best_weights = torch.load("/home/kan/Desktop/cinnamon/cn/github/SFNet/weights/best_checkpoint_geek_train_full.pt")
 adap3_dict = best_weights['state_dict1']
 adap4_dict = best_weights['state_dict2']
 net.adap_layer_feat3.load_state_dict(adap3_dict, strict=False)
 net.adap_layer_feat4.load_state_dict(adap4_dict, strict=False)
 
-sketch_a_path = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_086_k_R_A_R/sketch_v3/A0003.png"
-color_a_path  = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_086_k_R_A_R/color/A0003.tga"
+sketch_a_path = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_041_k_r_A/sketch_v3/A0001.png"
+color_a_path  = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_041_k_r_A/color/A0001.tga"
 
-sketch_b_path = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_086_k_R_A_R/sketch_v3/A0004.png"
+sketch_b_path = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_041_k_r_A/sketch_v3/A0002.png"
 output_path   =  "|".join(sketch_b_path.split('/')[-3:])
 
 list_a, list_b = prepare_batch(sketch_a_path, sketch_b_path, color_a_path=color_a_path)

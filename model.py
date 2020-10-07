@@ -271,22 +271,28 @@ class SFNet(nn.Module):
             
             return {'grid_S2T':grid_S2T, 'grid_T2S':grid_T2S, 'flow_S2T':flow_S2T, 'flow_T2S':flow_T2S,'corr_T2S': corr_T2S}
         else:
-            # Establish correspondences
-            grid_S2T, flow_S2T, smoothness_S2T = self.find_correspondence(corr_S2T, GT_src_mask)
-            grid_T2S, flow_T2S, smoothness_T2S = self.find_correspondence(corr_T2S, GT_tgt_mask)
-            
-            # Estimate warped masks
-            warped_src_mask = F.grid_sample(GT_tgt_mask, grid_S2T, mode = 'bilinear')
-            warped_tgt_mask = F.grid_sample(GT_src_mask, grid_T2S, mode = 'bilinear')
-            
-            # Estimate warped flows
-            warped_flow_S2T = -F.grid_sample(flow_T2S, grid_S2T, mode = 'bilinear') * GT_src_mask
-            warped_flow_T2S = -F.grid_sample(flow_S2T, grid_T2S, mode = 'bilinear') * GT_tgt_mask
-            flow_S2T = flow_S2T * GT_src_mask
-            flow_T2S = flow_T2S * GT_tgt_mask
+            assert type(GT_src_mask) == type(GT_tgt_mask)
 
-            return {'est_src_mask':warped_src_mask, 'smoothness_S2T':smoothness_S2T, 'grid_S2T':grid_S2T,
-                    'est_tgt_mask':warped_tgt_mask, 'smoothness_T2S':smoothness_T2S, 'grid_T2S':grid_T2S, 
-                    'flow_S2T':flow_S2T, 'flow_T2S':flow_T2S,
-                    'warped_flow_S2T': warped_flow_S2T, 'warped_flow_T2S':warped_flow_T2S,
+            _GT_src_mask = GT_src_mask
+            _GT_tgt_mask = GT_tgt_mask
+
+            # Establish correspondences
+            grid_S2T, flow_S2T, smoothness_S2T = self.find_correspondence(corr_S2T, _GT_src_mask)
+            grid_T2S, flow_T2S, smoothness_T2S = self.find_correspondence(corr_T2S, _GT_tgt_mask)
+
+            # Estimate warped masks
+            warped_src_mask = F.grid_sample(_GT_tgt_mask, grid_S2T, mode='bilinear')
+            warped_tgt_mask = F.grid_sample(_GT_src_mask, grid_T2S, mode='bilinear')
+
+            # Estimate warped flows
+            warped_flow_S2T = -F.grid_sample(flow_T2S, grid_S2T, mode='bilinear') * _GT_src_mask
+            warped_flow_T2S = -F.grid_sample(flow_S2T, grid_T2S, mode='bilinear') * _GT_tgt_mask
+            flow_S2T = flow_S2T * _GT_src_mask
+            flow_T2S = flow_T2S * _GT_tgt_mask
+
+            return {'est_src_mask': warped_src_mask, 'smoothness_S2T': smoothness_S2T, 'grid_S2T': grid_S2T,
+                    'est_tgt_mask': warped_tgt_mask, 'smoothness_T2S': smoothness_T2S, 'grid_T2S': grid_T2S,
+                    'flow_S2T': flow_S2T, 'flow_T2S': flow_T2S,
+                    'warped_flow_S2T': warped_flow_S2T, 'warped_flow_T2S': warped_flow_T2S,
                     'corr_T2S': corr_T2S}
+

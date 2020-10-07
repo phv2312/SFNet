@@ -4,8 +4,10 @@ import torch.nn.functional as F
 import numpy as np
 import os
 import random
+
 from custom_dataset import Pascal_Seg_Synth, PF_Pascal
-from geek_dataset import PairAnimeDataset
+from geek_dataset import PairAnimeDataset, RandomAugmentPairAnimeDataset
+from geek_dataset2 import MultipleMaskPairAnimeDataset
 from custom_loss import loss_function
 from model import SFNet
 import argparse
@@ -13,19 +15,19 @@ import argparse
 parser = argparse.ArgumentParser(description="SFNet")
 parser.add_argument('--seed', type=int, default=None, help='random seed')
 parser.add_argument('--batch_size', type=int, default=1, help='mini-batch size for training')
-parser.add_argument('--epochs', type=int, default=40, help='number of epochs for training')
+parser.add_argument('--epochs', type=int, default=50, help='number of epochs for training')
 parser.add_argument('--lr', type=float, default=3e-5, help='learning rate')
 parser.add_argument('--gamma', type=float, default=0.2, help='decaying factor')
 parser.add_argument('--decay_schedule', type=str, default='30', help='learning rate decaying schedule')
-parser.add_argument('--num_workers', type=int, default=0, help='number of workers for data loader')
-parser.add_argument('--feature_h', type=int, default=20, help='height of feature volume')
-parser.add_argument('--feature_w', type=int, default=20, help='width of feature volume')
+parser.add_argument('--num_workers', type=int, default=8, help='number of workers for data loader')
+parser.add_argument('--feature_h', type=int, default=48 * 2, help='height of feature volume')
+parser.add_argument('--feature_w', type=int, default=32 * 2, help='width of feature volume')
 parser.add_argument('--train_image_path', type=str, default='./data/training_data/VOC2012_seg_img.npy', help='directory of pre-processed(.npy) images')
 parser.add_argument('--train_mask_path', type=str, default='./data/training_data/VOC2012_seg_msk.npy', help='directory of pre-processed(.npy) foreground masks')
 parser.add_argument('--valid_csv_path', type=str, default='./data/PF_Pascal/bbox_val_pairs_pf_pascal.csv', help='directory of validation csv file')
 parser.add_argument('--valid_image_path', type=str, default='./data/PF_Pascal/', help='directory of validation data')
 parser.add_argument('--beta', type=float, default=50, help='inverse temperature of softmax @ kernel soft argmax')
-parser.add_argument('--kernel_sigma', type=float, default=5, help='standard deviation of Gaussian kerenl @ kernel soft argmax')
+parser.add_argument('--kernel_sigma', type=float, default=8, help='standard deviation of Gaussian kerenl @ kernel soft argmax')
 parser.add_argument('--lambda1', type=float, default=3, help='weight parameter of mask consistency loss')
 parser.add_argument('--lambda2', type=float, default=16, help='weight parameter of flow consistency loss')
 parser.add_argument('--lambda3', type=float, default=0.5, help='weight parameter of smoothness loss')
@@ -69,9 +71,9 @@ if not os.path.exists("./weights/"):
     os.mkdir("./weights/")
 
 # Data Loader
-root_dir = "/home/kan/Desktop/Cinnamon/tyler/hades_painting_version_github/full_data"
-w = 512
-h = 768
+root_dir = "./../../hades_painting_version_github/full_data"
+w = 512 * 2
+h = 768 * 2
 image_size = (w, h) # (w, h)
 mean = [2.0, 7.0, 20.0, 20.0, 10.0, 0.0, 0.0, 0.0]
 std = [0.8, 2.0, 10.0, 10.0, 30.0, 20.0, 30.0, 1.0]
@@ -79,7 +81,7 @@ mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
 std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
 #train_dataset = Pascal_Seg_Synth(args.train_image_path, args.train_mask_path, args.feature_h, args.feature_w)
-train_dataset = PairAnimeDataset(root_dir, image_size, mean, std)
+train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, mean, std) #MultipleMaskPairAnimeDataset(root_dir, image_size, mean, std)
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=args.batch_size,
                                            shuffle=True,
@@ -90,7 +92,6 @@ valid_dataset = train_dataset #PF_Pascal(args.valid_csv_path, args.valid_image_p
 valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,
                                            batch_size=1,
                                            shuffle=False, num_workers = args.num_workers)
-
 
 # Instantiate model
 net = SFNet(args.feature_h, args.feature_w, beta=args.beta, kernel_sigma = args.kernel_sigma)
@@ -119,8 +120,6 @@ def correct_keypoints(source_points, warped_points, L_pck, alpha=0.1):
     pck = torch.mean(correct_points.float())
     return pck
 
-
-
 # Training
 best_pck = 0
 print('Training started')
@@ -135,81 +134,31 @@ for ep in range(args.epochs):
     for i, batch in enumerate(train_loader):
         src_image = batch['image1'].to(device)
         tgt_image = batch['image2'].to(device)
-        GT_src_mask = batch['mask1'].to(device)
-        GT_tgt_mask = batch['mask2'].to(device)
+        GT_src_masks = batch['mask1s'] if 'mask1s' in batch else [batch['mask1']]
+        GT_tgt_masks = batch['mask2s'] if 'mask2s' in batch else [batch['mask2']]
 
-        print (src_image.shape)
-        print (tgt_image.shape)
-        print (GT_src_mask.shape)
-        print (GT_tgt_mask.shape)
+        if type(GT_src_masks) == list:
+            GT_src_masks = [m.to(device) for m in GT_src_masks]
+            GT_tgt_masks = [m.to(device) for m in GT_tgt_masks]
+        else:
+            raise Exception('unknown')
 
-        output = net(src_image, tgt_image, GT_src_mask, GT_tgt_mask)
+        for GT_src_mask, GT_tgt_mask in zip(GT_src_masks, GT_tgt_masks):
+            output = net(src_image, tgt_image, GT_src_mask, GT_tgt_mask)
 
-        optimizer.zero_grad()
-        loss,L1,L2,L3 = criterion(output, GT_src_mask, GT_tgt_mask)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-        log("Epoch %03d (%04d/%04d) = Loss : %5f (Now : %5f)\t" % (ep, i, len(train_dataset) // args.batch_size, total_loss / (i+1), loss.cpu().data), LOGGER_FILE)
-        log("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()), LOGGER_FILE)
+            optimizer.zero_grad()
+            loss,L1,L2,L3 = criterion(output, GT_src_mask, GT_tgt_mask)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            print("Epoch %03d (%04d/%04d) = Loss : %5f (Now : %5f)\t" % (ep, i, len(train_dataset) // args.batch_size, total_loss / (i+1), loss.cpu().data), LOGGER_FILE)
+            print("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()), LOGGER_FILE)
+
     scheduler.step()
-    log("Epoch %03d finished... Average loss : %5f\n"%(ep,total_loss/len(train_loader)), LOGGER_FILE)
+    print("Epoch %03d finished... Average loss : %5f\n"%(ep,total_loss/len(train_loader)), LOGGER_FILE)
 
     torch.save({'state_dict1': net.adap_layer_feat3.state_dict(),
                 'state_dict2': net.adap_layer_feat4.state_dict()},
                './weights/best_checkpoint.pt')
-    continue
-
-    with torch.no_grad():
-        log('Computing PCK@Validation set...', LOGGER_FILE)
-        net.eval()
-        total_correct_points = 0
-        total_points = 0
-        for i, batch in enumerate(valid_loader):
-            src_image = batch['image1'].to(device)
-            tgt_image = batch['image2'].to(device)
-            output = net(src_image, tgt_image, train=False)
-
-            small_grid = output['grid_T2S'][:,1:-1,1:-1,:]
-            small_grid[:,:,:,0] = small_grid[:,:,:,0] * (args.feature_w//2)/(args.feature_w//2 - 1)
-            small_grid[:,:,:,1] = small_grid[:,:,:,1] * (args.feature_h//2)/(args.feature_h//2 - 1)
-            src_image_H = int(batch['image1_size'][0][0])
-            src_image_W = int(batch['image1_size'][0][1])
-            tgt_image_H = int(batch['image2_size'][0][0])
-            tgt_image_W = int(batch['image2_size'][0][1])
-            small_grid = small_grid.permute(0,3,1,2)
-            grid = F.interpolate(small_grid, size = (tgt_image_H,tgt_image_W), mode='bilinear', align_corners=True)
-            grid = grid.permute(0,2,3,1)
-            grid_np = grid.cpu().data.numpy()
-
-            image1_points = batch['image1_points'][0]
-            image2_points = batch['image2_points'][0]
-
-            est_image1_points = np.zeros((2,image1_points.size(1)))
-            for j in range(image2_points.size(1)):
-                point_x = int(np.round(image2_points[0,j]))
-                point_y = int(np.round(image2_points[1,j]))
-
-                if point_x == -1 and point_y == -1:
-                    continue
-
-                if point_x == tgt_image_W:
-                    point_x = point_x - 1
-
-                if point_y == tgt_image_H:
-                    point_y = point_y - 1
-
-                est_y = (grid_np[0,point_y,point_x,1] + 1)*(src_image_H-1)/2
-                est_x = (grid_np[0,point_y,point_x,0] + 1)*(src_image_W-1)/2
-                est_image1_points[:,j] = [est_x,est_y]
-
-            total_correct_points += correct_keypoints(batch['image1_points'], torch.FloatTensor(est_image1_points).unsqueeze(0), batch['L_pck'], alpha=0.1)
-        PCK = total_correct_points / len(valid_dataset)
-        log('PCK: %5f\n\n' % PCK, LOGGER_FILE)
-        if PCK > best_pck:
-            best_pck = PCK
-            torch.save({'state_dict1' : net.adap_layer_feat3.state_dict(), 
-                        'state_dict2' : net.adap_layer_feat4.state_dict()},
-                        './weights/best_checkpoint.pt')
                 
 print('Done')

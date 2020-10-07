@@ -173,11 +173,11 @@ def add_random_noise(features, mask):
 
 
 def resize_image(np_image):
-    return cv2.resize(np_image, dsize=(512, 768))
+    return cv2.resize(np_image, dsize=(512 * 2, 768 * 2))
 
-class AhihiPairAnimeDataset(data.Dataset):
+class RandomAugmentPairAnimeDataset(data.Dataset):
     def __init__(self, root_dir, size, mean, std):
-        super(AhihiPairAnimeDataset, self).__init__()
+        super(RandomAugmentPairAnimeDataset, self).__init__()
         self.root_dir = root_dir
         self.size = size
         self.mean = mean
@@ -202,8 +202,8 @@ class AhihiPairAnimeDataset(data.Dataset):
 
             self.lengths[dir_name] = len(self.paths[dir_name]["color"])
 
-        self.feature_H = 48  # height of feature volume
-        self.feature_W = 32  # width of feature volume
+        self.feature_H = 48 * 2 # height of feature volume
+        self.feature_W = 32 * 2 # width of feature volume
 
         self.image_H = self.feature_H * 16
         self.image_W = self.feature_W * 16
@@ -372,9 +372,6 @@ class AhihiPairAnimeDataset(data.Dataset):
 
         image1, image2, mask1, mask2 = image1.squeeze(0).data, image2.squeeze(0).data, mask1.squeeze(
             0).data, mask2.squeeze(0).data
-
-        # imgshow(transforms.ToPILImage()(mask1))
-        # imgshow(transforms.ToPILImage()(mask2))
 
         mask1 = self.mask_transform2(mask1)  # resize
         mask2 = self.mask_transform2(mask2)  # resize
@@ -596,16 +593,16 @@ def tensor2image(tensor_input, revert=True):
 
 
 if __name__ == '__main__':
-    root_dir = "./../hades_painting_version_github/full_data"
-    w = 512
-    h = 768
+    root_dir = "./../../hades_painting_version_github/full_data"
+    w = 512 * 2
+    h = 768 * 2
     image_size = (w, h)  # (w, h)
     mean = [2.0, 7.0, 20.0, 20.0, 10.0, 0.0, 0.0, 0.0]
     std = [0.8, 2.0, 10.0, 10.0, 30.0, 20.0, 30.0, 1.0]
     mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
     std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
-    train_dataset = AhihiPairAnimeDataset(root_dir, image_size, mean, std)
+    train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, mean, std)
     train_loader  = data.DataLoader(train_dataset, shuffle=True, batch_size=1)
     print ('n_dataset:', len(train_dataset))
 

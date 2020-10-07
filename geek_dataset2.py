@@ -25,7 +25,7 @@ from rules.component_wrapper import get_moment_features
 from self_augment.gen import Generator as SelfGenerator
 
 import matplotlib.pyplot as plt
-def imghsow(im):
+def imgshow(im):
     plt.imshow(im)
     plt.show()
 
@@ -149,9 +149,9 @@ def add_random_noise(features, mask):
 def resize_image(np_image):
     return cv2.resize(np_image, dsize=(512, 768))
 
-class AhihiPairAnimeDataset(data.Dataset):
+class MultipleMaskPairAnimeDataset(data.Dataset):
     def __init__(self, root_dir, size, mean, std):
-        super(AhihiPairAnimeDataset, self).__init__()
+        super(MultipleMaskPairAnimeDataset, self).__init__()
         self.root_dir = root_dir
         self.size = size
         self.mean = mean
@@ -248,40 +248,6 @@ class AhihiPairAnimeDataset(data.Dataset):
         x = F.grid_sample(x, grid)
         return x
 
-    def from_real(self, index, next_index, name):
-        to_tensor = transforms.ToTensor()
-
-        # read images
-        color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
-        sketch_a, _ = get_image_by_index(self.paths[name]["sketch_v3"], index)
-        sketch_a = cv2.cvtColor(sketch_a, cv2.COLOR_GRAY2BGR)
-
-        color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
-        sketch_b, _ = get_image_by_index(self.paths[name]["sketch_v3"], next_index)
-        sketch_b = cv2.cvtColor(sketch_b, cv2.COLOR_GRAY2BGR)
-
-        # extract components
-        mask_a, components_a, is_removed_a, mask_foreground_a = self.get_component_mask(color_a, path_a)
-        mask_b, components_b, is_removed_b, mask_foreground_b = self.get_component_mask(color_b, path_b)
-
-        sketch_a = Image.fromarray(sketch_a.astype(np.uint8))
-        #mask_foreground_a = Image.fromarray(mask_foreground_a.astype(np.uint8))
-
-        sketch_b = Image.fromarray(sketch_b.astype(np.uint8))
-        #mask_foreground_b = Image.fromarray(mask_foreground_b.astype(np.uint8))
-
-        image1 = to_tensor(self.image_transform1(sketch_a))
-        image2 = to_tensor(self.image_transform1(sketch_b))
-
-        mask1 = self.mask_transform2(mask_foreground_a)  # resize
-        mask2 = self.mask_transform2(mask_foreground_b)  # resize
-        mask1 = (mask1 > 0.1).float()  # binarize
-        mask2 = (mask2 > 0.1).float()  # binarize
-
-        # Return image and the label
-        return {'image1_rgb': image1.clone(), 'image2_rgb': image2.clone(), 'image1': self.normalize(image1),
-                'image2': self.normalize(image2), 'mask1': mask1, 'mask2': mask2}
-
     def __getitem__(self, index):
         name = None
         for key, length in self.lengths.items():
@@ -295,12 +261,6 @@ class AhihiPairAnimeDataset(data.Dataset):
         k = random.choice([1, 1, 1, 2])
         next_index = max(index - k, 0) if index == length - 1 else min(index + k, length - 1)
 
-        #
-        # if np.random.uniform(0, 1.) < 0.5:
-        #     return self.from_real(index, next_index, name)
-        # else:
-        #     return self.from_augment(index, next_index, name)
-
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
         sketch_a, _ = get_image_by_index(self.paths[name]["sketch_v3"], index)
 
@@ -309,9 +269,12 @@ class AhihiPairAnimeDataset(data.Dataset):
         colored_a, mask_a, components_a, _ = list_a
         colored_b, mask_b, components_b, sketch_b = list_b
 
+        sketch_a = Image.fromarray(cv2.cvtColor(sketch_a.astype(np.uint8), cv2.COLOR_GRAY2BGR))
+        sketch_b = Image.fromarray(cv2.cvtColor(sketch_b.astype(np.uint8), cv2.COLOR_GRAY2BGR))
+
         # mask fore ground
-        mask_foreground_a = (mask_a != 0).astype(np.uint) * 255
-        mask_foreground_b = (mask_b != 0).astype(np.uint) * 255
+        mask_foreground_a = (mask_a != 0).astype(np.uint8) * 255
+        mask_foreground_b = (mask_b != 0).astype(np.uint8) * 255
 
         # -> tensor
         image1 = self.to_tensor(self.image_transform1(sketch_a))
@@ -320,14 +283,33 @@ class AhihiPairAnimeDataset(data.Dataset):
         mask1s = []
         mask2s = []
         for index_a, index_b in positive_pairs:
-            mask1 = (mask_a == components_a[index_a]['label']).astype(np.uint) * 255
-            mask2 = (mask_b == components_b[index_b]['label']).astype(np.uint) * 255
+            lbl_a = components_a[index_a]['label']
+            lbl_b = components_b[index_b]['label']
+
+            area_a = components_a[index_a]['area']
+            area_b = components_b[index_b]['area']
+
+            min_area = 0.5 * self.feature_H * self.feature_W
+            if area_a < min_area or area_b < min_area:
+                continue
+
+            if lbl_a == 0 or lbl_b == 0:
+                continue
+
+            mask1 = (mask_a == lbl_a).astype(np.uint8) * 255
+            mask2 = (mask_b == lbl_b).astype(np.uint8) * 255
+
+            # imgshow(mask1)
+            # imgshow(mask2)
 
             mask1 = self.mask_transform2(mask1)
             mask2 = self.mask_transform2(mask2)
 
             mask1 = (mask1 > 0.1).float()  # binarize
             mask2 = (mask2 > 0.1).float()  # binarize
+
+            # imgshow(tensor2image(mask1))
+            # imgshow(tensor2image(mask2))
 
             mask1s += [mask1]
             mask2s += [mask2]
@@ -361,7 +343,7 @@ def tensor2image(tensor_input, revert=True):
 
 
 if __name__ == '__main__':
-    root_dir = "./../hades_painting_version_github/full_data"
+    root_dir = "./../../hades_painting_version_github/full_data"
     w = 512
     h = 768
     image_size = (w, h)  # (w, h)
@@ -370,19 +352,17 @@ if __name__ == '__main__':
     mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
     std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
-    train_dataset = AhihiPairAnimeDataset(root_dir, image_size, mean, std)
+    train_dataset = MultipleMaskPairAnimeDataset(root_dir, image_size, mean, std)
     train_loader  = data.DataLoader(train_dataset, shuffle=True, batch_size=1)
     print ('n_dataset:', len(train_dataset))
 
     train_iter = iter(train_loader)
     for batch_id, batch_data in enumerate(train_iter):
         image1, image2  = batch_data['image1'], batch_data['image2']
-        mask1, mask2    = batch_data['mask1'], batch_data['mask2']
+        mask1s, mask2s  = batch_data['mask1s'], batch_data['mask2s']
 
         image1_np   = tensor2image(image1)
         image2_np   = tensor2image(image2)
-        mask1_np    = tensor2image(mask1)
-        mask2_np    = tensor2image(mask2)
 
         print ('image1')
         imgshow(image1_np)
@@ -390,9 +370,18 @@ if __name__ == '__main__':
         print ('image2')
         imgshow(image2_np)
 
-        print ('mask1')
-        imgshow(mask1_np)
+        g_count = 0
+        for mask1, mask2 in zip(mask1s, mask2s):
+            print ('g_count num: %d ...' % (g_count + 1))
 
-        print ('mask2')
-        imgshow(mask2_np)
+            mask1_np = tensor2image(mask1)
+            mask2_np = tensor2image(mask2)
+
+            print ('mask1')
+            imgshow(mask1_np)
+
+            print ('mask2')
+            imgshow(mask2_np)
+
+            g_count += 1
 
