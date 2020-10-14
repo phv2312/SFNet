@@ -1,6 +1,48 @@
 import torch
 import torch.nn as nn
 
+class loss_functions(nn.Module):
+    def __init__(self, args):
+        super(loss_functions, self).__init__()
+        self.loss_function = loss_function(args)
+
+    def forward(self, output, GT_src_masks, GT_tgt_masks):
+        n_mask = len(GT_src_masks)
+
+        losses = []
+        l1s = []
+        l2s = []
+        l3s = []
+        for mask_id in range(n_mask):
+            k = 1.
+            if mask_id == (n_mask - 1):
+                k = 3.
+
+            _output = {
+                'est_src_mask': output['est_src_mask'][mask_id],
+                'smoothness_S2T': output['smoothness_S2T'][mask_id],
+                'grid_S2T': output['grid_S2T'],
+                'est_tgt_mask': output['est_tgt_mask'][mask_id],
+                'smoothness_T2S': output['smoothness_T2S'][mask_id],
+                'grid_T2S': output['grid_T2S'],
+                'flow_S2T': output['flow_S2T'][mask_id],
+                'flow_T2S': output['flow_T2S'][mask_id],
+                'warped_flow_S2T': output['warped_flow_S2T'][mask_id],
+                'warped_flow_T2S': output['warped_flow_T2S'][mask_id],
+                'corr_T2S': output['corr_T2S'],
+            }
+
+            GT_src_mask = GT_src_masks[mask_id]
+            GT_tgt_mask = GT_tgt_masks[mask_id]
+
+            loss, l1, l2, l3 = self.loss_function(_output, GT_src_mask, GT_tgt_mask)
+            losses += [loss * k]
+            l1s += [l1 * k]
+            l2s += [l2 * k]
+            l3s += [l3 * k]
+
+        return torch.stack(losses).mean(),torch.stack(l1s).mean(), torch.stack(l2s).mean(), torch.stack(l3s).mean()
+
 class loss_function(nn.Module):
     def __init__(self, args):
         super(loss_function, self).__init__()
@@ -18,58 +60,22 @@ class loss_function(nn.Module):
     def forward(self, output, GT_src_mask, GT_tgt_mask):
         eps = 1
 
-        if type(GT_src_mask) != list:
-            _GT_src_mask = GT_src_mask
-            _GT_tgt_mask = GT_tgt_mask
+        _GT_src_mask = GT_src_mask
+        _GT_tgt_mask = GT_tgt_mask
 
-            b, _, h, w = _GT_src_mask.size()
-            src_num_fgnd = _GT_src_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
-            tgt_num_fgnd = _GT_tgt_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
+        b, _, h, w = _GT_src_mask.size()
+        src_num_fgnd = _GT_src_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
+        tgt_num_fgnd = _GT_tgt_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
 
-            L1 = self.lossfn(output['est_src_mask'], _GT_src_mask) / (h * w) + self.lossfn(output['est_tgt_mask'], _GT_tgt_mask) / (h * w) # mask consistency
-            L2 = self.lossfn_two_var(output['flow_S2T'], output['warped_flow_S2T'], src_num_fgnd)\
-               + self.lossfn_two_var(output['flow_T2S'], output['warped_flow_T2S'], tgt_num_fgnd) # flow consistency
-            L3 = torch.sum(output['smoothness_S2T'] / src_num_fgnd) + torch.sum(output['smoothness_T2S'] / tgt_num_fgnd) # smoothness
+        L1 = self.lossfn(output['est_src_mask'], _GT_src_mask) / (h * w) + self.lossfn(output['est_tgt_mask'],
+                                                                                       _GT_tgt_mask) / (
+                         h * w)  # mask consistency
+        L2 = self.lossfn_two_var(output['flow_S2T'], output['warped_flow_S2T'], src_num_fgnd) \
+             + self.lossfn_two_var(output['flow_T2S'], output['warped_flow_T2S'], tgt_num_fgnd)  # flow consistency
+        L3 = torch.sum(output['smoothness_S2T'] / src_num_fgnd) + torch.sum(
+            output['smoothness_T2S'] / tgt_num_fgnd)  # smoothness
 
-            return (self.lambda1*L1 + self.lambda2*L2 + self.lambda3*L3) / _GT_src_mask.size(0), \
-                   L1 * self.lambda1 / _GT_src_mask.size(0), \
-                   L2 * self.lambda2 / _GT_src_mask.size(0), \
-                   L3 * self.lambda3 / _GT_src_mask.size(0)
-        else:
-            raise Exception('unknown')
-            # return
-            #
-            # L1s = []
-            # L2s = []
-            # L3s = []
-            # L_combines = []
-            #
-            # for _GT_src_mask, _GT_tgt_mask in zip(GT_src_mask, GT_tgt_mask):
-            #     _GT_src_mask = GT_src_mask
-            #     _GT_tgt_mask = GT_tgt_mask
-            #
-            #     b, _, h, w = _GT_src_mask.size()
-            #     src_num_fgnd = _GT_src_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
-            #     tgt_num_fgnd = _GT_tgt_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
-            #
-            #     L1 = self.lossfn(output['est_src_mask'], _GT_src_mask) / (h * w) + self.lossfn(output['est_tgt_mask'],
-            #                                                                                    _GT_tgt_mask) / (h * w)  # mask consistency
-            #     L2 = self.lossfn_two_var(output['flow_S2T'], output['warped_flow_S2T'], src_num_fgnd) \
-            #          + self.lossfn_two_var(output['flow_T2S'], output['warped_flow_T2S'],
-            #                                tgt_num_fgnd)  # flow consistency
-            #     L3 = torch.sum(output['smoothness_S2T'] / src_num_fgnd) + torch.sum(
-            #         output['smoothness_T2S'] / tgt_num_fgnd)  # smoothness
-            #
-            #     L_combines += [(self.lambda1*L1 + self.lambda2*L2 + self.lambda3*L3) / _GT_src_mask.size(0)]
-            #     L1s += [L1 * self.lambda1 / _GT_src_mask.size(0)]
-            #     L2s += [L2 * self.lambda2 / _GT_src_mask.size(0)]
-            #     L3s += [L3 * self.lambda3 / _GT_src_mask.size(0)]
-            #
-            # #
-            # L1 = torch.cat(L1s, dim=0)
-            # L2 = torch.cat(L2s, dim=0)
-            # L3 = torch.cat(L3s, dim=0)
-            # L_combine = torch.cat(L_combines, dim=0)
-            #
-            # #
-            # return torch.mean(L_combine), torch.mean(L1), torch.mean(L2), torch.mean(L3)
+        return (self.lambda1 * L1 + self.lambda2 * L2 + self.lambda3 * L3) / _GT_src_mask.size(0), \
+               L1 * self.lambda1 / _GT_src_mask.size(0), \
+               L2 * self.lambda2 / _GT_src_mask.size(0), \
+               L3 * self.lambda3 / _GT_src_mask.size(0)

@@ -8,7 +8,7 @@ import random
 from custom_dataset import Pascal_Seg_Synth, PF_Pascal
 from geek_dataset import PairAnimeDataset, RandomAugmentPairAnimeDataset
 from geek_dataset2 import MultipleMaskPairAnimeDataset
-from custom_loss import loss_function
+from custom_loss import loss_function, loss_functions
 from model import SFNet
 import argparse
 
@@ -20,8 +20,8 @@ parser.add_argument('--lr', type=float, default=3e-5, help='learning rate')
 parser.add_argument('--gamma', type=float, default=0.2, help='decaying factor')
 parser.add_argument('--decay_schedule', type=str, default='30', help='learning rate decaying schedule')
 parser.add_argument('--num_workers', type=int, default=8, help='number of workers for data loader')
-parser.add_argument('--feature_h', type=int, default=48 * 2, help='height of feature volume')
-parser.add_argument('--feature_w', type=int, default=32 * 2, help='width of feature volume')
+parser.add_argument('--feature_h', type=int, default=48, help='height of feature volume')
+parser.add_argument('--feature_w', type=int, default=32, help='width of feature volume')
 parser.add_argument('--train_image_path', type=str, default='./data/training_data/VOC2012_seg_img.npy', help='directory of pre-processed(.npy) images')
 parser.add_argument('--train_mask_path', type=str, default='./data/training_data/VOC2012_seg_msk.npy', help='directory of pre-processed(.npy) foreground masks')
 parser.add_argument('--valid_csv_path', type=str, default='./data/PF_Pascal/bbox_val_pairs_pf_pascal.csv', help='directory of validation csv file')
@@ -81,7 +81,7 @@ mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
 std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
 #train_dataset = Pascal_Seg_Synth(args.train_image_path, args.train_mask_path, args.feature_h, args.feature_w)
-train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, mean, std) #MultipleMaskPairAnimeDataset(root_dir, image_size, mean, std)
+train_dataset = MultipleMaskPairAnimeDataset(root_dir, image_size, mean, std)
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=args.batch_size,
                                            shuffle=True,
@@ -99,7 +99,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
 # Instantiate loss
-criterion = loss_function(args).to(device)
+criterion = loss_functions(args).to(device)
 
 # Instantiate optimizer
 param = list(net.adap_layer_feat3.parameters())+list(net.adap_layer_feat4.parameters())
@@ -137,22 +137,18 @@ for ep in range(args.epochs):
         GT_src_masks = batch['mask1s'] if 'mask1s' in batch else [batch['mask1']]
         GT_tgt_masks = batch['mask2s'] if 'mask2s' in batch else [batch['mask2']]
 
-        if type(GT_src_masks) == list:
-            GT_src_masks = [m.to(device) for m in GT_src_masks]
-            GT_tgt_masks = [m.to(device) for m in GT_tgt_masks]
-        else:
-            raise Exception('unknown')
+        GT_src_masks = [m.to(device) for m in GT_src_masks]
+        GT_tgt_masks = [m.to(device) for m in GT_tgt_masks]
 
-        for GT_src_mask, GT_tgt_mask in zip(GT_src_masks, GT_tgt_masks):
-            output = net(src_image, tgt_image, GT_src_mask, GT_tgt_mask)
+        output = net(src_image, tgt_image, GT_src_masks, GT_tgt_masks)
 
-            optimizer.zero_grad()
-            loss,L1,L2,L3 = criterion(output, GT_src_mask, GT_tgt_mask)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-            print("Epoch %03d (%04d/%04d) = Loss : %5f (Now : %5f)\t" % (ep, i, len(train_dataset) // args.batch_size, total_loss / (i+1), loss.cpu().data), LOGGER_FILE)
-            print("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()), LOGGER_FILE)
+        optimizer.zero_grad()
+        loss,L1,L2,L3 = criterion(output, GT_src_masks, GT_tgt_masks)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        print("Epoch %03d (%04d/%04d) = Loss : %5f (Now : %5f)\t" % (ep, i, len(train_dataset) // args.batch_size, total_loss / (i+1), loss.cpu().data), LOGGER_FILE)
+        print("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()), LOGGER_FILE)
 
     scheduler.step()
     print("Epoch %03d finished... Average loss : %5f\n"%(ep,total_loss/len(train_loader)), LOGGER_FILE)

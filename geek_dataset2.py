@@ -248,19 +248,80 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         x = F.grid_sample(x, grid)
         return x
 
-    def __getitem__(self, index):
-        name = None
-        for key, length in self.lengths.items():
-            if index < length:
-                name = key
-                break
-            index -= length
+    def _from_real(self, index, next_index, name):
+        to_tensor = transforms.ToTensor()
 
-        # next index
-        length = len(self.paths[name]["color"])
-        k = random.choice([1, 1, 1, 2])
-        next_index = max(index - k, 0) if index == length - 1 else min(index + k, length - 1)
+        # read images
+        color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
+        sketch_a, _ = get_image_by_index(self.paths[name]["sketch_v3"], index)
+        sketch_a = cv2.cvtColor(sketch_a, cv2.COLOR_GRAY2BGR)
 
+        color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
+        sketch_b, _ = get_image_by_index(self.paths[name]["sketch_v3"], next_index)
+        sketch_b = cv2.cvtColor(sketch_b, cv2.COLOR_GRAY2BGR)
+
+        # extract components
+        mask_a, components_a, is_removed_a, mask_foreground_a = self.get_component_mask(color_a, path_a)
+        mask_b, components_b, is_removed_b, mask_foreground_b = self.get_component_mask(color_b, path_b)
+
+        # component matching
+        positive_pairs = match_components_three_stage(components_a, components_b, self.matcher, False)
+        positive_pairs = np.array(positive_pairs)
+
+        # -> tensor
+        sketch_a = Image.fromarray(sketch_a.astype(np.uint8))
+        sketch_b = Image.fromarray(sketch_b.astype(np.uint8))
+
+        image1 = to_tensor(self.image_transform1(sketch_a))
+        image2 = to_tensor(self.image_transform1(sketch_b))
+
+        mask1s = []
+        mask2s = []
+        for index_a, index_b in positive_pairs:
+            lbl_a = components_a[index_a]['label']
+            lbl_b = components_b[index_b]['label']
+
+            area_a = components_a[index_a]['area']
+            area_b = components_b[index_b]['area']
+
+            min_area = 0.5 * self.feature_H * self.feature_W
+            if area_a < min_area or area_b < min_area:
+                continue
+
+            if lbl_a == 0 or lbl_b == 0:
+                continue
+
+            mask1 = (mask_a == lbl_a).astype(np.uint8) * 255
+            mask2 = (mask_b == lbl_b).astype(np.uint8) * 255
+
+            # imgshow(mask1)
+            # imgshow(mask2)
+
+            mask1 = self.mask_transform2(mask1)
+            mask2 = self.mask_transform2(mask2)
+
+            mask1 = (mask1 > 0.1).float()  # binarize
+            mask2 = (mask2 > 0.1).float()  # binarize
+
+            # imgshow(tensor2image(mask1))
+            # imgshow(tensor2image(mask2))
+
+            mask1s += [mask1]
+            mask2s += [mask2]
+
+        # fore-ground vs back-ground
+        mask1 = self.mask_transform2(mask_foreground_a)  # resize
+        mask2 = self.mask_transform2(mask_foreground_b)  # resize
+        mask1 = (mask1 > 0.1).float()  # binarize
+        mask2 = (mask2 > 0.1).float()  # binarize
+
+        mask1s += [mask1]
+        mask2s += [mask2]
+
+        return {'image1_rgb': image1.clone(), 'image2_rgb': image2.clone(), 'image1': self.normalize(image1),
+                'image2': self.normalize(image2), 'mask1s': mask1s, 'mask2s': mask2s}
+
+    def _from_augment(self, index, next_index, name):
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
         sketch_a, _ = get_image_by_index(self.paths[name]["sketch_v3"], index)
 
@@ -326,6 +387,26 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         return {'image1_rgb': image1.clone(), 'image2_rgb': image2.clone(), 'image1': self.normalize(image1),
                 'image2': self.normalize(image2), 'mask1s': mask1s, 'mask2s': mask2s}
 
+    def __getitem__(self, index):
+        name = None
+        for key, length in self.lengths.items():
+            if index < length:
+                name = key
+                break
+            index -= length
+
+        # next index
+        length = len(self.paths[name]["color"])
+        k = random.choice([1, 1, 1, 2])
+        next_index = max(index - k, 0) if index == length - 1 else min(index + k, length - 1)
+
+        if np.random.uniform(0, 1.) < -0.5:
+            print ('from real')
+            return self._from_real(index, next_index, name)
+        else:
+            print ('from augment')
+            return self._from_augment(index, next_index, name)
+
 def revert_normalize(tensor_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     std  = torch.tensor(std).view(1,1,1,3).permute(0,3,2,1)
     mean = torch.tensor(mean).view(1,1,1,3).permute(0,3,2,1)
@@ -340,7 +421,6 @@ def tensor2image(tensor_input, revert=True):
         return (tensor_input[0] * 255).detach().cpu().numpy().astype(np.uint)
 
     return (tensor_input[0].permute(1, 2, 0) * 255).detach().cpu().numpy().astype(np.uint)
-
 
 if __name__ == '__main__':
     root_dir = "./../../hades_painting_version_github/full_data"
@@ -360,6 +440,11 @@ if __name__ == '__main__':
     for batch_id, batch_data in enumerate(train_iter):
         image1, image2  = batch_data['image1'], batch_data['image2']
         mask1s, mask2s  = batch_data['mask1s'], batch_data['mask2s']
+
+        print ('image1', image1.shape)
+        print ('image2', image2.shape)
+        print ('mask1s', len(mask1s))
+        print ('mask2s', len(mask2s))
 
         image1_np   = tensor2image(image1)
         image2_np   = tensor2image(image2)

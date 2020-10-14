@@ -20,9 +20,9 @@ class Generator():
 
         self.component_wrapper = ComponentWrapper(min_area, min_size)
 
-        self.max_ang_range   = 15
+        self.max_ang_range   = 25
         self.max_shear_range = 0
-        self.max_trans_range = 100
+        self.max_trans_range = 150
 
 
         self.augment_wrapper = TPSWrapper()
