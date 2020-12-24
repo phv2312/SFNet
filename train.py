@@ -5,9 +5,7 @@ import numpy as np
 import os
 import random
 
-from custom_dataset import Pascal_Seg_Synth, PF_Pascal
-from geek_dataset import PairAnimeDataset, RandomAugmentPairAnimeDataset
-from geek_dataset2 import MultipleMaskPairAnimeDataset
+from geek_dataset import MultipleMaskPairAnimeDataset as PairAnimeDataset
 from custom_loss import loss_function, loss_functions
 from model import SFNet
 import argparse
@@ -40,6 +38,7 @@ args = parser.parse_args()
 if args.seed == None:
     args.seed = np.random.randint(10000)
     print('Seed number: ', args.seed)
+
 global global_seed
 global_seed = args.seed
 torch.manual_seed(global_seed)
@@ -71,17 +70,16 @@ if not os.path.exists("./weights/"):
     os.mkdir("./weights/")
 
 # Data Loader
-root_dir = "./../../hades_painting_version_github/full_data"
-w = 512 * 2
-h = 768 * 2
+root_dir = "/home/kan/Desktop/overfit_color"
+w = 512
+h = 768
 image_size = (w, h) # (w, h)
 mean = [2.0, 7.0, 20.0, 20.0, 10.0, 0.0, 0.0, 0.0]
 std = [0.8, 2.0, 10.0, 10.0, 30.0, 20.0, 30.0, 1.0]
 mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
 std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
-#train_dataset = Pascal_Seg_Synth(args.train_image_path, args.train_mask_path, args.feature_h, args.feature_w)
-train_dataset = MultipleMaskPairAnimeDataset(root_dir, image_size, mean, std)
+train_dataset = PairAnimeDataset(root_dir, image_size, mean, std)
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=args.batch_size,
                                            shuffle=True,
