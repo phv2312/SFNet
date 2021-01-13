@@ -14,7 +14,7 @@ def normalize_moment(moment):
 
 class ShapeMatchingWrapper:
     descriptor_orb = None
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    #bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
     def __init__(self, area_epsilon=0.3):
         self.area_epsilon = area_epsilon

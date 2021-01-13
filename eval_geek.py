@@ -6,7 +6,6 @@ import random
 import cv2
 from PIL import Image
 import torchvision.transforms as transforms
-from geek_dataset import PairAnimeDataset
 from model import SFNet
 import argparse
 
@@ -56,34 +55,51 @@ def find_corresponding_point(point_x, point_y, tgt_image_W, tgt_image_H, grid_np
     return (int(est_x), int(est_y))
 
 from rules.component_wrapper import ComponentWrapper, resize_mask, get_component_color
+from skimage import measure
 component_wrapper = ComponentWrapper(min_area=10, min_size=3)
-def prepare_batch(sketch_a_path, sketch_b_path, h=768, w=512, color_a_path=None, color_b_path=None):
+def get_component_point(h, w, color_a_path):
+    color_a = Image.open(color_a_path).convert('RGB')
+
+    #
+    mask_a, components_a = component_wrapper.extract_on_color_image(np.array(color_a))
+    get_component_color(components_a, np.array(color_a), mode=ComponentWrapper.EXTRACT_COLOR)
+
+    #
+    mask_a_resized = resize_mask(mask_a, components_a, size=(w, h))
+    centroids = []
+    for region in  measure.regionprops(mask_a_resized):
+        centroid = region['centroid']
+        y, x = centroid
+        centroids += [(x,y)]
+
+    return centroids
+
+def prepare_batch(h, w, color_a_path, color_b_path):
     transform_sequences = transforms.Compose([
         transforms.Resize(size=(h, w), interpolation=2),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    sketch_a = Image.open(sketch_a_path).convert('RGB')
     color_a  = Image.open(color_a_path).convert('RGB')
-    sketch_b = Image.open(sketch_b_path).convert('RGB')
+    color_b  = Image.open(color_b_path).convert('RGB')
 
     #
     mask_a, components_a = component_wrapper.extract_on_color_image(np.array(color_a))
     get_component_color(components_a, np.array(color_a), mode=ComponentWrapper.EXTRACT_COLOR)
 
-    mask_b, components_b = component_wrapper.extract_on_sketch_v3(np.array(sketch_b))
+    mask_b, components_b = component_wrapper.extract_on_color_image(np.array(color_b))
 
     # resize
     mask_a_resized = resize_mask(mask_a, components_a, size=(w,h))
     mask_b_resized = resize_mask(mask_b, components_b, size=(w,h))
 
     #
-    sketch_a_tensor = transform_sequences(sketch_a).unsqueeze(0)
-    sketch_b_tensor = transform_sequences(sketch_b).unsqueeze(0)
+    color_a_tensor = transform_sequences(color_a).unsqueeze(0)
+    color_b_tensor = transform_sequences(color_b).unsqueeze(0)
 
-    return (sketch_a_tensor, mask_a_resized, components_a), \
-           (sketch_b_tensor, mask_b_resized, components_b)
+    return (color_a_tensor, mask_a_resized, components_a), \
+           (color_b_tensor, mask_b_resized, components_b)
 
 def visualize_pair(paired_components, ref_colored_img, ref_sketch_components, sketch_components, rgb_sketch):
     """Color the sketch.
@@ -148,39 +164,6 @@ def visualize(pair, ref_components, tgt_components):
 
     return debug_im[:(max_y + 1), :(max_x + 1)]
 
-from scipy.spatial.distance import cdist
-from collections import Counter
-def compute_component_matrix_distance(mask_a, mask_b, grid_np, target_h, target_w):
-    labels_a = np.unique(mask_a)
-    labels_b = np.unique(mask_b)
-
-    # calculate mask_b_from_a
-    mask_a_tensor = torch.from_numpy(mask_a[np.newaxis, :, :]).unsqueeze(0) # (b,c,h,w)
-    grid_tensor   = torch.from_numpy(grid_np) # (b,h,w,2)
-
-    mask_b_from_a = F.grid_sample(mask_a_tensor.float(), grid_tensor, mode='nearest')
-    mask_b_from_a = mask_b_from_a.squeeze().cpu().numpy().astype(np.uint8)
-
-    print ('b_from_a')
-    imgshow(mask_b_from_a)
-
-    print ('debug_mask')
-    debug_mask = np.concatenate([mask_a, mask_b_from_a, mask_b], axis=1)
-    imgshow(debug_mask)
-
-    #
-    pair = []
-    for label_b in labels_b:
-        ys_b, xs_b = np.where(mask_b == label_b)
-        points_b = [(x, y) for y, x in zip(ys_b, xs_b)]
-
-        labels_a_in_b = [mask_b_from_a[y,x] for (x,y) in points_b]
-        label_a_predict = Counter(labels_a_in_b).most_common(1)[0][0]
-
-        pair += [(label_a_predict, label_b)]
-
-    return pair
-
 
 parser = argparse.ArgumentParser(description="SFNet evaluation")
 parser.add_argument('--num_workers', type=int, default=0, help='number of workers for data loader')
@@ -201,24 +184,22 @@ net.to(device)
 
 # Load weights
 print("Load pre-trained weights")
-best_weights = torch.load("/home/kan/Desktop/cinnamon/cn/github/SFNet/weights/best_checkpoint_geek_train_full.pt")
+#best_weights = torch.load("./weights/best_checkpoint.pt")
+best_weights = torch.load('./weights/best_checkpoint.pt')
 adap3_dict = best_weights['state_dict1']
 adap4_dict = best_weights['state_dict2']
 net.adap_layer_feat3.load_state_dict(adap3_dict, strict=False)
 net.adap_layer_feat4.load_state_dict(adap4_dict, strict=False)
 
-sketch_a_path = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_041_k_r_A/sketch_v3/A0001.png"
-color_a_path  = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_041_k_r_A/color/A0001.tga"
+color_a_path  = "/home/kan/Desktop/hioki_example/hioki_example/tap_wari/y_HZ_030__a/color/a0001.tga"
+color_b_path = "/home/kan/Desktop/hioki_example/hioki_example/tap_wari/y_HZ_030__a/color/a0006.tga"
+output_path   =  "|".join(color_b_path.split('/')[-3:])
 
-sketch_b_path = "/home/kan/Desktop/cinnamon/cn/hades_painting_version_github/full_data/hor01_041_k_r_A/sketch_v3/A0002.png"
-output_path   =  "|".join(sketch_b_path.split('/')[-3:])
-
-list_a, list_b = prepare_batch(sketch_a_path, sketch_b_path, color_a_path=color_a_path)
+list_a, list_b = prepare_batch(h=768, w=512, color_a_path=color_a_path, color_b_path=color_b_path)
 image_a, mask_a, components_a = list_a
 image_b, mask_b, components_b = list_b
 
 ref_colored_img = np.array(Image.open(color_a_path).convert('RGB'))
-rgb_sketch = np.array(Image.open(sketch_b_path).convert('RGB'))
 
 with torch.no_grad():
     net.eval()
@@ -237,6 +218,46 @@ with torch.no_grad():
     grid = F.interpolate(small_grid, size=(tgt_image_H, tgt_image_W), mode='bilinear', align_corners=True)
     grid = grid.permute(0, 2, 3, 1)
     grid_np = grid.cpu().data.numpy()
+
+    # image2_points = np.array(
+    #     [[np.random.randint(100, 512), np.random.randint(100, 768)] for _ in range(10)]).transpose()
+    image2_points = np.array(get_component_point(src_image_H, src_image_W, color_b_path)).transpose()
+
+    src_image_np = (revert_normalize(src_image.cpu())[0].permute(1, 2, 0) * 255).detach().cpu().numpy().astype(np.uint)
+    tgt_image_np = (revert_normalize(tgt_image.cpu())[0].permute(1, 2, 0) * 255).detach().cpu().numpy().astype(np.uint)
+
+    debug_image = np.concatenate([src_image_np, tgt_image_np], axis=1)
+    cv2.imwrite("./tmp.png", debug_image)
+    debug_image = cv2.imread("./tmp.png")
+
+    est_image1_points = np.zeros((2, image2_points.shape[1]))
+    for j in range(image2_points.shape[1]):
+        point_x = int(np.round(image2_points[0, j]))
+        point_y = int(np.round(image2_points[1, j]))
+
+        if point_x == -1 and point_y == -1:
+            continue
+
+        if point_x == tgt_image_W:
+            point_x = point_x - 1
+
+        if point_y == tgt_image_H:
+            point_y = point_y - 1
+
+        est_y = (grid_np[0, point_y, point_x, 1] + 1) * (src_image_H - 1) / 2
+        est_x = (grid_np[0, point_y, point_x, 0] + 1) * (src_image_W - 1) / 2
+        est_image1_points[:, j] = [est_x, est_y]
+
+        print(point_x, point_y)
+        print(est_x, est_y)
+
+        cv2.circle(debug_image, (int(point_x + src_image_W), int(point_y)), 2, color=(255, 0, 0), thickness=3)
+        cv2.circle(debug_image, (int(est_x), int(est_y)), 2, color=(255, 0, 0), thickness=3)
+        cv2.line(debug_image, (int(est_x), int(est_y)), (int(point_x + 512), int(point_y)), (0, 0, 255), 1)
+
+    imgshow(debug_image)
+
+    exit()
 
     pair = compute_component_matrix_distance(mask_a, mask_b, grid_np, 768, 512)
     img = visualize_pair(pair, ref_colored_img, components_a, components_b, rgb_sketch) #visualize(pair, components_a, components_b)

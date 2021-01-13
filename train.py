@@ -5,8 +5,8 @@ import numpy as np
 import os
 import random
 
-from geek_dataset import MultipleMaskPairAnimeDataset as PairAnimeDataset
-from custom_loss import loss_function, loss_functions
+from geek_dataset import RandomAugmentPairAnimeDataset as PairAnimeDataset
+from custom_loss import loss_function
 from model import SFNet
 import argparse
 
@@ -70,23 +70,23 @@ if not os.path.exists("./weights/"):
     os.mkdir("./weights/")
 
 # Data Loader
-root_dir = "/home/kan/Desktop/overfit_color"
-w = 512
+root_dir = "./data/sample"
 h = 768
+w = 512
 image_size = (w, h) # (w, h)
 mean = [2.0, 7.0, 20.0, 20.0, 10.0, 0.0, 0.0, 0.0]
 std = [0.8, 2.0, 10.0, 10.0, 30.0, 20.0, 30.0, 1.0]
 mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
 std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
-train_dataset = PairAnimeDataset(root_dir, image_size, mean, std)
+train_dataset = PairAnimeDataset(root_dir, image_size, mean, std, args.feature_h, args.feature_w)
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=args.batch_size,
                                            shuffle=True,
                                            num_workers = args.num_workers,
                                            worker_init_fn = _init_fn)
 
-valid_dataset = train_dataset #PF_Pascal(args.valid_csv_path, args.valid_image_path, args.feature_h, args.feature_w, args.eval_type)
+valid_dataset = train_dataset
 valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,
                                            batch_size=1,
                                            shuffle=False, num_workers = args.num_workers)
@@ -97,7 +97,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
 # Instantiate loss
-criterion = loss_functions(args).to(device)
+criterion = loss_function(args).to(device)
 
 # Instantiate optimizer
 param = list(net.adap_layer_feat3.parameters())+list(net.adap_layer_feat4.parameters())
@@ -132,24 +132,21 @@ for ep in range(args.epochs):
     for i, batch in enumerate(train_loader):
         src_image = batch['image1'].to(device)
         tgt_image = batch['image2'].to(device)
-        GT_src_masks = batch['mask1s'] if 'mask1s' in batch else [batch['mask1']]
-        GT_tgt_masks = batch['mask2s'] if 'mask2s' in batch else [batch['mask2']]
+        GT_src_mask = batch['mask1'].to(device)
+        GT_tgt_mask = batch['mask2'].to(device)
 
-        GT_src_masks = [m.to(device) for m in GT_src_masks]
-        GT_tgt_masks = [m.to(device) for m in GT_tgt_masks]
-
-        output = net(src_image, tgt_image, GT_src_masks, GT_tgt_masks)
+        output = net(src_image, tgt_image, GT_src_mask, GT_tgt_mask)
 
         optimizer.zero_grad()
-        loss,L1,L2,L3 = criterion(output, GT_src_masks, GT_tgt_masks)
+        loss, L1, L2, L3 = criterion(output, GT_src_mask, GT_tgt_mask)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-        print("Epoch %03d (%04d/%04d) = Loss : %5f (Now : %5f)\t" % (ep, i, len(train_dataset) // args.batch_size, total_loss / (i+1), loss.cpu().data), LOGGER_FILE)
-        print("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()), LOGGER_FILE)
+        print("Epoch %03d (%04d/%04d) = Loss : %5f (Now : %5f)\t" % (ep, i, len(train_dataset) // args.batch_size, total_loss / (i + 1), loss.cpu().data))
+        print("L1 : %5f, L2 : %5f, L3 : %5f\n" % (L1.item(), L2.item(), L3.item()))
 
     scheduler.step()
-    print("Epoch %03d finished... Average loss : %5f\n"%(ep,total_loss/len(train_loader)), LOGGER_FILE)
+    print("Epoch %03d finished... Average loss : %5f\n"%(ep,total_loss/len(train_loader)))
 
     torch.save({'state_dict1': net.adap_layer_feat3.state_dict(),
                 'state_dict2': net.adap_layer_feat4.state_dict()},
