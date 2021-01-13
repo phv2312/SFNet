@@ -62,7 +62,7 @@ def log(text, LOGGER_FILE):
         f.close()
 
 LOGGER_FILE = './training_log.txt'
-
+weight_path = "./weights/best_checkpoint.pt"
 if os.path.exists(LOGGER_FILE):
     os.remove(LOGGER_FILE)
 
@@ -93,6 +93,18 @@ valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,
 
 # Instantiate model
 net = SFNet(args.feature_h, args.feature_w, beta=args.beta, kernel_sigma = args.kernel_sigma)
+
+# Load pre-trained weight
+if os.path.exists(weight_path):
+    try:
+        best_weights = torch.load(weight_path, map_location='cpu')
+        adap3_dict = best_weights['state_dict1']
+        adap4_dict = best_weights['state_dict2']
+        net.adap_layer_feat3.load_state_dict(adap3_dict, strict=False)
+        net.adap_layer_feat4.load_state_dict(adap4_dict, strict=False)
+    except Exception as e:
+        print ('exception while loading weight from pre-trained, detail:', str(e))
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 
@@ -150,6 +162,6 @@ for ep in range(args.epochs):
 
     torch.save({'state_dict1': net.adap_layer_feat3.state_dict(),
                 'state_dict2': net.adap_layer_feat4.state_dict()},
-               './weights/best_checkpoint.pt')
+               weight_path)
                 
 print('Done')
