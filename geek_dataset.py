@@ -173,7 +173,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
                 cut_name = '_'.join(root.split('/')[-2:])
                 if len(file_paths) < 1: continue
                 full_path_list = [os.path.join(root, file_path) for file_path in file_paths if
-                                  os.path.splitext(file_path)[-1] in ['.tga', '.png']]
+                                  os.path.splitext(file_path)[-1] in ['.tga']]
 
                 paths[cut_name] = {}
                 lengths[cut_name] = {}
