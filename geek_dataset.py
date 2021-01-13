@@ -293,8 +293,15 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
-
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
+
+        if len(color_a) < 3:
+            color_a = cv2.cvtColor(color_a, cv2.COLOR_GRAY2BGR)
+            print ('color_path: %s only 1 channel?' % path_a)
+
+        if len(color_b) < 3:
+            color_b = cv2.cvtColor(color_b, cv2.COLOR_GRAY2BGR)
+            print('color_path: %s only 1 channel?' % path_b)
 
         # extract components
         mask_a, components_a, is_removed_a, mask_foreground_a = self.get_component_mask(color_a, path_a)
