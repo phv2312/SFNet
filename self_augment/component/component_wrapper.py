@@ -8,6 +8,7 @@ from math import copysign, log10
 from PIL import Image
 from natsort import natsorted
 
+
 def get_moment_features(components, mask):
     features = np.zeros([mask.shape[0], mask.shape[1], 8])
 
@@ -205,6 +206,7 @@ def rectify_mask(mask, component, ratio):
             elif new_area[label] > 1 and count == 0:
                 mask[coord[0], coord[1]] = component["label"]
                 count += 1
+
     return mask
 
 
@@ -220,7 +222,7 @@ def resize_mask(mask, components, size):
         component = components[i - 1]
         new_mask = rectify_mask(new_mask, component, ratio)
 
-    assert len(np.unique(mask)) == len(np.unique(new_mask)), 'len old mask: %d vs len new mask: %d' % (len(np.unique(mask)), len(np.unique(new_mask)))
+    assert len(np.unique(mask)) == len(np.unique(new_mask))
     return new_mask
 
 
@@ -247,7 +249,8 @@ def main():
                 continue
 
             color_image = cv2.cvtColor(np.array(Image.open(path).convert("RGB")), cv2.COLOR_RGB2BGR)
-            output_mask, output_components = component_wrapper.process(color_image)
+            output_mask, output_components = component_wrapper.process(
+                color_image, None, ComponentWrapper.EXTRACT_COLOR)
             get_component_color(output_components, color_image)
 
             new_mask = resize_mask(output_mask, output_components, (768, 512))

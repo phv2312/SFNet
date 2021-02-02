@@ -2,27 +2,28 @@ import os
 import glob
 import random
 import pickle
+import numpy as np
 import cv2
-import torch.utils.data as data
+import matplotlib.pyplot as plt
 from natsort import natsorted
+from copy import deepcopy
+from PIL import Image
 
 import torch
 import torch.nn.functional as F
+import torch.utils.data as data
 import torchvision.transforms as transforms
-from PIL import Image
-import numpy as np
-from copy import deepcopy
 import torchvision.transforms.functional as TF
 
 from rules.color_component_matching import ComponentWrapper, ShapeMatchingWrapper, resize_mask
 from rules.color_component_matching import get_component_color
-from rules.component_wrapper import get_moment_features
 from self_augment.gen import Generator as SelfGenerator
 
-import matplotlib.pyplot as plt
-def imgshow(im):
-    plt.imshow(im)
+
+def image_show(image):
+    plt.imshow(image)
     plt.show()
+
 
 def b2label(mask_b, positive_pairs, components_a, components_b):
     mask_b_corr_a = np.zeros_like(mask_b)
@@ -35,6 +36,7 @@ def b2label(mask_b, positive_pairs, components_a, components_b):
 
     return mask_b_corr_a
 
+
 def get_image_by_index(paths, index):
     if index is None:
         return None
@@ -46,6 +48,7 @@ def get_image_by_index(paths, index):
         image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
     return image, path
 
+
 def draw_component_image(components, mask):
     image = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
 
@@ -54,6 +57,7 @@ def draw_component_image(components, mask):
         image[coords[:, 0], coords[:, 1], :] = component["color"]
 
     cv2.imwrite("%d.png" % len(components), image)
+
 
 def match_components_three_stage(components_a, components_b, matcher, is_removed):
     pairs = []
@@ -94,6 +98,7 @@ def match_components_three_stage(components_a, components_b, matcher, is_removed
 
     return pairs
 
+
 def loader_collate(batch):
     assert len(batch) == 1
     batch = batch[0]
@@ -107,14 +112,15 @@ def loader_collate(batch):
     colors_a = torch.tensor(batch[7]).unsqueeze(0).int()
     colors_b = torch.tensor(batch[8]).unsqueeze(0).int()
 
-    color_image_a = torch.tensor(batch[9]).unsqueeze(0).float().permute(0,3,1,2) / 255.
-    color_image_b = torch.tensor(batch[10]).unsqueeze(0).float().permute(0,3,1,2) / 255.
+    color_image_a = torch.tensor(batch[9]).unsqueeze(0).float().permute(0, 3, 1, 2) / 255.
+    color_image_b = torch.tensor(batch[10]).unsqueeze(0).float().permute(0, 3, 1, 2) / 255.
 
-    sketch_image_a = torch.tensor(batch[11]).unsqueeze(0).float().permute(0,3,1,2) / 255.
-    sketch_image_b = torch.tensor(batch[12]).unsqueeze(0).float().permute(0,3,1,2) / 255.
+    sketch_image_a = torch.tensor(batch[11]).unsqueeze(0).float().permute(0, 3, 1, 2) / 255.
+    sketch_image_b = torch.tensor(batch[12]).unsqueeze(0).float().permute(0, 3, 1, 2) / 255.
 
     return (features_a, mask_a, colors_a, batch[5], color_image_a, sketch_image_a), \
            (features_b, mask_b, colors_b, batch[6], color_image_b, sketch_image_b), positive_pairs
+
 
 def random_remove_component(mask, components, max_removed=2):
     if len(components) < 10 or random.random() < 0.6:
@@ -135,14 +141,17 @@ def random_remove_component(mask, components, max_removed=2):
             removed += 1
     return new_mask, new_components, removed > 0
 
+
 def add_random_noise(features, mask):
     noise = np.random.normal(loc=0.0, scale=0.02, size=features.shape)
     bool_mask = mask > 0
     features = features + noise * bool_mask
     return features
 
+
 def resize_image(np_image):
     return cv2.resize(np_image, dsize=(512, 768))
+
 
 class RandomAugmentPairAnimeDataset(data.Dataset):
     def process_input_old(self, root_dir):
@@ -171,7 +180,8 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
             cut_full_path = os.path.join(root_dir, cut_name)
             for root, dirs, file_paths in os.walk(cut_full_path):
                 cut_name = '_'.join(root.split('/')[-2:])
-                if len(file_paths) < 1: continue
+                if len(file_paths) < 1:
+                    continue
                 full_path_list = [os.path.join(root, file_path) for file_path in file_paths if
                                   os.path.splitext(file_path)[-1] in ['.tga']]
 
@@ -184,7 +194,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         return lengths, paths
 
-    def __init__(self, root_dir, size, mean, std, feature_H=48, feature_W=32):
+    def __init__(self, root_dir, size, mean, std, feature_h=48, feature_w=32):
         super(RandomAugmentPairAnimeDataset, self).__init__()
         self.root_dir = root_dir
         self.size = size
@@ -199,7 +209,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
         self.matcher = ShapeMatchingWrapper()
 
         # old
-        #self.lengths, self.paths = self.process_input_old(root_dir)
+        # self.lengths, self.paths = self.process_input_old(root_dir)
         # new
         self.lengths, self.paths = self.process_input_new(root_dir)
 
@@ -217,28 +227,32 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
         #     self.lengths[dir_name] = len(self.paths[dir_name]["color"])
         # ###
 
-        self.feature_H = feature_H # height of feature volume
-        self.feature_W = feature_W # width of feature volume
+        self.feature_H = feature_h  # height of feature volume
+        self.feature_W = feature_w  # width of feature volume
 
         self.image_H = self.feature_H * 16
         self.image_W = self.feature_W * 16
 
-        self.image_transform1 = transforms.Compose([transforms.Resize((self.image_H, self.image_W), interpolation=2)])
+        self.image_transform1 = transforms.Compose(
+            [transforms.Resize((self.image_H, self.image_W), interpolation=2)])
 
         self.image_transform2 = transforms.Compose([
             transforms.transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-            transforms.ToTensor()]
-        )
+            transforms.ToTensor(),
+        ])
 
-        self.mask_transform1 = transforms.Compose([transforms.Resize((self.image_H, self.image_W), interpolation=2),
-                                                   transforms.ToTensor()])
+        self.mask_transform1 = transforms.Compose([
+            transforms.Resize((self.image_H, self.image_W), interpolation=2),
+            transforms.ToTensor(),
+        ])
 
-        self.mask_transform2 = transforms.Compose([transforms.ToPILImage(),
-                                                   transforms.Resize((self.feature_H, self.feature_W)),
-                                                   transforms.ToTensor()])
+        self.mask_transform2 = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((self.feature_H, self.feature_W)),
+            transforms.ToTensor(),
+        ])
 
         self.to_tensor = transforms.ToTensor()
-
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     def __len__(self):
@@ -263,13 +277,13 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
             save_data = pickle.load(open(save_path, "rb"))
             mask, components = save_data["mask"], save_data["components"]
 
-        #mask, components, is_removed = random_remove_component(mask, components)
+        # mask, components, is_removed = random_remove_component(mask, components)
         is_removed = False
         mask_foreground = (mask != 0).astype(np.uint) * 255
         mask = resize_mask(mask, components, self.size).astype(np.int32)
 
-        mask_foreground = cv2.resize(mask_foreground, dsize=self.size, interpolation=cv2.INTER_NEAREST) #self.get_mask_foreground(components, color_image)
-
+        mask_foreground = cv2.resize(mask_foreground, dsize=self.size, interpolation=cv2.INTER_NEAREST)
+        # self.get_mask_foreground(components, color_image)
         return mask, components, is_removed, mask_foreground
 
     def get_mask_foreground(self, components, color_img):
@@ -277,10 +291,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
         coord = max_area_component['coords'][0]
         rgb_value = color_img[coord[0], coord[1]]
 
-        if tuple(rgb_value) == tuple([255,255,255]):
+        if tuple(rgb_value) == tuple([255, 255, 255]):
             mask = 255 - max_area_component['image']
             return mask
-
         return None
 
     def affine_transform(self, x, theta):
@@ -298,7 +311,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         if len(color_a) < 3:
             color_a = cv2.cvtColor(color_a, cv2.COLOR_GRAY2BGR)
-            print ('color_path: %s only 1 channel?' % path_a)
+            print('color_path: %s only 1 channel?' % path_a)
 
         if len(color_b) < 3:
             color_b = cv2.cvtColor(color_b, cv2.COLOR_GRAY2BGR)
@@ -334,19 +347,19 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         if np.random.uniform(0, 1.) < 0.5:
             image = Image.fromarray(color_a.astype(np.uint8))
-            mask  = Image.fromarray(mask_foreground_a.astype(np.uint8))
+            mask = Image.fromarray(mask_foreground_a.astype(np.uint8))
         else:
             image = Image.fromarray(color_b.astype(np.uint8))
-            mask  = Image.fromarray(mask_foreground_b.astype(np.uint8))
+            mask = Image.fromarray(mask_foreground_b.astype(np.uint8))
 
         p = np.random.uniform()
         if p < 0.5:
-            image, mask = TF.hflip(image), TF.hflip(mask)  # pair filp
+            image, mask = TF.hflip(image), TF.hflip(mask)  # pair flip
 
         image = self.image_transform1(image)  # resize
         image1 = self.image_transform2(image).unsqueeze(0)  # jitter -> image1
         image2 = deepcopy(image1)
-        #image2 = self.image_transform2(image).unsqueeze(0)  # jitter -> image2
+        # image2 = self.image_transform2(image).unsqueeze(0)  # jitter -> image2
         mask = self.mask_transform1(mask).unsqueeze(0)  # resize
 
         # generate source image/mask
@@ -361,9 +374,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
         affine_inverse1 = torch.from_numpy(affine_inverse1).type(torch.FloatTensor)
 
         image1 = self.affine_transform(image1, affine1)  # source image
-
         mask = self.affine_transform(mask, affine1)
-        mask = self.affine_transform(mask, affine_inverse1)  # convert truncated pixels to 0
+        mask = self.affine_transform(mask, affine_inverse1)
+        # convert truncated pixels to 0
 
         # generate target image/mask
         theta2 = np.zeros(9)
@@ -409,8 +422,8 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         if np.random.uniform(0, 1.) < .5:
             return self.from_real(index, next_index, name)
-        else:
-            return self.from_augment(index, next_index, name)
+        return self.from_augment(index, next_index, name)
+
 
 class MultipleMaskPairAnimeDataset(data.Dataset):
     def __init__(self, root_dir, size, mean, std):
@@ -445,21 +458,24 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         self.image_H = self.feature_H * 16
         self.image_W = self.feature_W * 16
 
-        self.image_transform1 = transforms.Compose([transforms.Resize((self.image_H, self.image_W), interpolation=2)])
+        self.image_transform1 = transforms.Compose(
+            [transforms.Resize((self.image_H, self.image_W), interpolation=2)])
 
-        self.image_transform2 = transforms.Compose(
-            [transforms.transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-             transforms.ToTensor()])
+        self.image_transform2 = transforms.Compose([
+            transforms.transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.ToTensor(),
+        ])
 
-        self.mask_transform1 = transforms.Compose([transforms.Resize((self.image_H, self.image_W), interpolation=2),
-                                                   transforms.ToTensor()])
+        self.mask_transform1 = transforms.Compose(
+            [transforms.Resize((self.image_H, self.image_W), interpolation=2), transforms.ToTensor()])
 
-        self.mask_transform2 = transforms.Compose([transforms.ToPILImage(),
-                                                   transforms.Resize((self.feature_H, self.feature_W)),
-                                                   transforms.ToTensor()])
+        self.mask_transform2 = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((self.feature_H, self.feature_W)),
+            transforms.ToTensor(),
+        ])
 
         self.to_tensor = transforms.ToTensor()
-
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         self.augmentor = SelfGenerator(resized_w=512, resized_h=768, min_area=10, min_size=3)
 
@@ -485,7 +501,7 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
             save_data = pickle.load(open(save_path, "rb"))
             mask, components = save_data["mask"], save_data["components"]
 
-        #mask, components, is_removed = random_remove_component(mask, components)
+        # mask, components, is_removed = random_remove_component(mask, components)
         is_removed = False
 
         mask_fg1 = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY) != 255
@@ -494,8 +510,8 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         mask_foreground = (mask_fg1 | mask_fg2).astype(np.uint) * 255
         mask = resize_mask(mask, components, self.size).astype(np.int32)
 
-        mask_foreground = cv2.resize(mask_foreground, dsize=self.size, interpolation=cv2.INTER_NEAREST) #self.get_mask_foreground(components, color_image)
-
+        mask_foreground = cv2.resize(mask_foreground, dsize=self.size, interpolation=cv2.INTER_NEAREST)
+        # self.get_mask_foreground(components, color_image)
         return mask, components, is_removed, mask_foreground
 
     def get_mask_foreground(self, components, color_img):
@@ -503,10 +519,9 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         coord = max_area_component['coords'][0]
         rgb_value = color_img[coord[0], coord[1]]
 
-        if tuple(rgb_value) == tuple([255,255,255]):
+        if tuple(rgb_value) == tuple([255, 255, 255]):
             mask = 255 - max_area_component['image']
             return mask
-
         return None
 
     def affine_transform(self, x, theta):
@@ -598,17 +613,17 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         next_index = max(index - k, 0) if index == length - 1 else min(index + k, length - 1)
 
         if np.random.uniform(0, 1.) < 10.5:
-            print ('from real')
+            print('from real')
             return self._from_real(index, next_index, name)
-        else:
-            print ('from augment')
-            return self._from_augment(index, next_index, name)
+        print('from augment')
+        return self._from_augment(index, next_index, name)
+
 
 def revert_normalize(tensor_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
-    std  = torch.tensor(std).view(1,1,1,3).permute(0,3,2,1)
-    mean = torch.tensor(mean).view(1,1,1,3).permute(0,3,2,1)
-
+    std = torch.tensor(std).view(1, 1, 1, 3).permute(0, 3, 2, 1)
+    mean = torch.tensor(mean).view(1, 1, 1, 3).permute(0, 3, 2, 1)
     return tensor_img * std + mean
+
 
 def tensor2image(tensor_input, revert=True):
     if revert:
@@ -619,8 +634,9 @@ def tensor2image(tensor_input, revert=True):
 
     return (tensor_input[0].permute(1, 2, 0) * 255).detach().cpu().numpy().astype(np.uint)
 
-if __name__ == '__main__':
-    root_dir = "/home/kan/Desktop/data_dc/hor02" #"./data/sample/"
+
+def main():
+    root_dir = "/home/kan/Desktop/data_dc/hor02"
     w = 512
     h = 768
     image_size = (w, h)  # (w, h)
@@ -630,41 +646,44 @@ if __name__ == '__main__':
     std = np.array(std)[:, np.newaxis][:, np.newaxis]
 
     train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, mean, std)
-    train_loader  = data.DataLoader(train_dataset, shuffle=True, batch_size=1)
-    print ('n_dataset:', len(train_dataset))
+    train_loader = data.DataLoader(train_dataset, shuffle=True, batch_size=1)
+    print('n_dataset:', len(train_dataset))
 
     train_iter = iter(train_loader)
     for batch_id, batch_data in enumerate(train_iter):
-        image1, image2  = batch_data['image1'], batch_data['image2']
-        mask1s, mask2s  = [batch_data['mask1']], [batch_data['mask2']]
+        image1, image2 = batch_data['image1'], batch_data['image2']
+        mask1s, mask2s = [batch_data['mask1']], [batch_data['mask2']]
 
-        print ('image1', image1.shape)
-        print ('image2', image2.shape)
-        print ('mask1s', len(mask1s))
-        print ('mask2s', len(mask2s))
+        print('image1', image1.shape)
+        print('image2', image2.shape)
+        print('mask1s', len(mask1s))
+        print('mask2s', len(mask2s))
 
-        image1_np   = tensor2image(image1)
-        image2_np   = tensor2image(image2)
+        image1_np = tensor2image(image1)
+        image2_np = tensor2image(image2)
 
-        print ('image1')
-        imgshow(image1_np)
+        print('image1')
+        image_show(image1_np)
 
-        print ('image2')
-        imgshow(image2_np)
+        print('image2')
+        image_show(image2_np)
 
         g_count = 0
 
         for mask1, mask2 in zip(mask1s, mask2s):
-            print ('g_count num: %d ...' % (g_count + 1))
+            print('g_count num: %d ...' % (g_count + 1))
 
             mask1_np = tensor2image(mask1)
             mask2_np = tensor2image(mask2)
 
-            print ('mask1')
-            imgshow(mask1_np)
+            print('mask1')
+            image_show(mask1_np)
 
-            print ('mask2')
-            imgshow(mask2_np)
-
+            print('mask2')
+            image_show(mask2_np)
             g_count += 1
+    return
 
+
+if __name__ == '__main__':
+    main()

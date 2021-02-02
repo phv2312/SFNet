@@ -3,10 +3,12 @@ import cv2
 import torch
 from PIL import Image
 
+
 def cosine_distance(output_a, output_b):
     distances = torch.nn.functional.cosine_similarity(output_a, output_b, dim=-1)
     distances = torch.ones_like(distances) - distances
     return distances
+
 
 def find_nearest_match(anchor, components, graph):
     min_index = -1

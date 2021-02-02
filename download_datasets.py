@@ -2,36 +2,41 @@ import requests
 import tarfile
 import os
 
-#taken from https://stackoverflow.com/questions/25010369/wget-curl-large-file-from-google-drive/39225039#39225039
-def download_file_from_google_drive(id, destination):
-    URL = "https://docs.google.com/uc?export=download"
+
+def download_file_from_google_drive(file_id, destination):
+    # taken from https://stackoverflow.com/questions/25010369/wget-curl-large-file-from-google-drive/39225039#39225039
+    url = "https://docs.google.com/uc?export=download"
     session = requests.Session()
 
-    response = session.get(URL, params = { 'id' : id }, stream = True)
+    response = session.get(url, params={'id': file_id}, stream=True)
     token = get_confirm_token(response)
 
     if token:
-        params = { 'id' : id, 'confirm' : token }
-        response = session.get(URL, params = params, stream = True)
+        params = {'id': file_id, 'confirm': token}
+        response = session.get(url, params=params, stream=True)
 
-    save_response_content(response, destination)    
+    save_response_content(response, destination)
+
 
 def get_confirm_token(response):
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
             return value
-
     return None
 
+
 def save_response_content(response, destination):
-    CHUNK_SIZE = 32768
+    chunk_size = 32768
 
     with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk: # filter out keep-alive new chunks
+        for chunk in response.iter_content(chunk_size):
+            if chunk:
+                # filter out keep-alive new chunks
                 f.write(chunk)
+    return
 
-if __name__ == "__main__":
+
+def main():
     if not os.path.exists('./data/training_data/'):
         print("Downloading files at './data/training_data/'")
         download_file_from_google_drive('1oP0_zMUksaLe3nZFE-fKBcjLw5rA-PYf', './data/training_data.tar.gz')
@@ -59,3 +64,7 @@ if __name__ == "__main__":
         tar.close()
         os.remove('./data/PF_WILLOW.tar.gz')
     print("Done!")
+
+
+if __name__ == "__main__":
+    main()

@@ -261,7 +261,7 @@ def choose_pair_by_distance(rows, cols, max_distance, return_matrix=False):
     distance[np.arange(len(rows)), np.arange(len(rows))] = np.inf
 
     # get the min distance
-    min_ids = np.argmin(distance, axis=-1) # n_samples,
+    min_ids = np.argmin(distance, axis=-1)  # n_samples,
 
     pair = {k: v for k, v in enumerate(min_ids) if distance[k, v] <= max_distance}
     if not return_matrix:

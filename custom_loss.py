@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class loss_functions(nn.Module):
     def __init__(self, args):
         super(loss_functions, self).__init__()

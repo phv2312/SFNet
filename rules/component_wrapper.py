@@ -209,6 +209,7 @@ def rectify_mask(mask, component, ratio):
 
     return mask
 
+
 def resize_mask(mask, components, size):
     new_mask = cv2.resize(mask, size, interpolation=cv2.INTER_NEAREST)
     ratio = (size[1] / mask.shape[0], size[0] / mask.shape[1])
@@ -221,8 +222,9 @@ def resize_mask(mask, components, size):
         component = components[i - 1]
         new_mask = rectify_mask(new_mask, component, ratio)
 
-    assert len(np.unique(mask)) == len(np.unique(new_mask)), 'len old mask: %d vs len new mask: %d' % (len(np.unique(mask)), len(np.unique(new_mask)))
+    assert len(np.unique(mask)) == len(np.unique(new_mask))
     return new_mask
+
 
 def main():
     root_dir = "D:/Data/GeekToys/coloring_data/simple_data"
@@ -247,7 +249,8 @@ def main():
                 continue
 
             color_image = cv2.cvtColor(np.array(Image.open(path).convert("RGB")), cv2.COLOR_RGB2BGR)
-            output_mask, output_components = component_wrapper.process(color_image)
+            output_mask, output_components = component_wrapper.process(
+                color_image, None, ComponentWrapper.EXTRACT_COLOR)
             get_component_color(output_components, color_image)
 
             new_mask = resize_mask(output_mask, output_components, (768, 512))
