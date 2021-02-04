@@ -97,7 +97,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         return lengths, paths
 
-    def __init__(self, root_dir, size, feature_h=48, feature_w=32):
+    def __init__(self, root_dir, size, feature_h=32, feature_w=48):
         super(RandomAugmentPairAnimeDataset, self).__init__()
         self.root_dir = root_dir
         self.size = size
@@ -336,14 +336,14 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
 
             self.lengths[dir_name] = len(self.paths[dir_name]["color"])
 
-        self.feature_H = 48  # height of feature volume
-        self.feature_W = 32  # width of feature volume
+        self.feature_h = 32  # height of feature volume
+        self.feature_w = 48  # width of feature volume
 
-        self.image_H = self.feature_H * 16
-        self.image_W = self.feature_W * 16
+        self.image_h = self.feature_h * 16
+        self.image_w = self.feature_w * 16
 
         self.image_transform1 = transforms.Compose(
-            [transforms.Resize((self.image_H, self.image_W), interpolation=2)])
+            [transforms.Resize((self.image_h, self.image_w), interpolation=2)])
 
         self.image_transform2 = transforms.Compose([
             transforms.transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
@@ -351,11 +351,11 @@ class MultipleMaskPairAnimeDataset(data.Dataset):
         ])
 
         self.mask_transform1 = transforms.Compose(
-            [transforms.Resize((self.image_H, self.image_W), interpolation=2), transforms.ToTensor()])
+            [transforms.Resize((self.image_h, self.image_w), interpolation=2), transforms.ToTensor()])
 
         self.mask_transform2 = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((self.feature_H, self.feature_W)),
+            transforms.Resize((self.feature_h, self.feature_w)),
             transforms.ToTensor(),
         ])
 

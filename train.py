@@ -24,8 +24,8 @@ def parse_args():
     parser.add_argument("--gamma", type=float, default=0.2, help="decaying factor")
     parser.add_argument("--decay_schedule", type=str, default="30", help="learning rate decaying schedule")
     parser.add_argument("--num_workers", type=int, default=8, help="number of workers for data loader")
-    parser.add_argument("--feature_h", type=int, default=48, help="height of feature volume")
-    parser.add_argument("--feature_w", type=int, default=32, help="width of feature volume")
+    parser.add_argument("--feature_h", type=int, default=32, help="height of feature volume")
+    parser.add_argument("--feature_w", type=int, default=48, help="width of feature volume")
     parser.add_argument("--train_image_path", type=str, default="./data/training_data/VOC2012_seg_img.npy",
                         help="directory of pre-processed(.npy) images")
     parser.add_argument("--train_mask_path", type=str, default="./data/training_data/VOC2012_seg_msk.npy",
@@ -89,8 +89,8 @@ def main(args):
 
     # Data Loader
     root_dir = args.data_dir
-    h = 768
-    w = 512
+    h = 512
+    w = 768
     image_size = (w, h)
 
     train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, args.feature_h, args.feature_w)
