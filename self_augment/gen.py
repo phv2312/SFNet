@@ -3,14 +3,14 @@ import os
 import numpy as np
 import PIL.Image as Image
 from collections import Counter
-from augmentor.tps_wrapper import TPSWrapper
-from augmentor.affine_wrapper import RandomAffineWrapper
-from augmentor.wrapper import AugmentWrapper
-from component.component_wrapper import ComponentWrapper, get_component_color
+from self_augment.augmentor.tps_wrapper import TPSWrapper
+from self_augment.augmentor.affine_wrapper import RandomAffineWrapper
+from self_augment.augmentor.wrapper import AugmentWrapper
+from self_augment.component.component_wrapper import ComponentWrapper, get_component_color
 
-from utils import ensure_np_image, extract_boundary, resize_image, resize_component_and_mask
-from utils import mask_to_component, random_add_border
-from utils import image_show, save_components, save_positive_to_debug
+from self_augment.utils import ensure_np_image, extract_boundary, resize_image, resize_component_and_mask
+from self_augment.utils import mask_to_component, random_add_border
+from self_augment.utils import image_show, save_components, save_positive_to_debug
 
 
 class Generator:

@@ -5,7 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from skimage import measure
-from component.component_wrapper import ComponentWrapper, resize_mask
+from self_augment.component.component_wrapper import ComponentWrapper, resize_mask
 
 
 def image_show(image):
