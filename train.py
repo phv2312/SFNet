@@ -16,6 +16,7 @@ global_seed = 0
 
 def parse_args():
     parser = argparse.ArgumentParser(description="SFNet")
+    parser.add_argument("--data_dir", type=str, required=True, help="path to data directory")
     parser.add_argument("--seed", type=int, default=None, help="random seed")
     parser.add_argument("--batch_size", type=int, default=1, help="mini-batch size for training")
     parser.add_argument("--epochs", type=int, default=50, help="number of epochs for training")
@@ -87,7 +88,7 @@ def main(args):
         os.mkdir("./weights/")
 
     # Data Loader
-    root_dir = "/home/tyler/work/data/GeekInt/data_dc"
+    root_dir = args.data_dir
     h = 768
     w = 512
     image_size = (w, h)
