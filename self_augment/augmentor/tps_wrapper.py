@@ -126,10 +126,10 @@ def tps_theta_from_points(c_src, c_dst, reduced=False):
 
 
 def batch_tps_grid(batch_theta, batch_c_dst, shape):
-    b = batch_theta.shape[0]
+    batch_size = batch_theta.shape[0]
 
     batch_grid = []
-    for b in range(b):
+    for b in range(0, batch_size):
         grid = tps_grid(batch_theta[b], batch_c_dst[b], shape)
         batch_grid += [grid]
 
@@ -181,7 +181,9 @@ class TPSWrapper:
                 borderValue=border_value)
 
         elif len(image.shape) == 2:
-            return cv2.remap(image, map_x, map_y, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+            return cv2.remap(
+                image, map_x, map_y, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT,
+                borderValue=0)
 
         else:
             raise Exception('unknown n_channel, expected 1 & 3, got %d ...' % len(image.shape))

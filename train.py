@@ -185,7 +185,6 @@ def main(args):
             "state_dict2": net.adap_layer_feat4.state_dict()
         }, weight_path)
 
-    a = torch.from_numpy
     print("Done")
 
 

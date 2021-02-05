@@ -219,10 +219,12 @@ class FindCorrespondence(nn.Module):
 
     def forward(self, corr, gt_mask=None):
         b, _, h, w = corr.size()
-        grid_x = self.grid_X.expand(b, h, w)  # x coordinates of a regular grid
-        grid_x = grid_x.unsqueeze(1)  # b x 1 x h x w
-        grid_y = self.grid_Y.expand(b, h, w)  # y coordinates of a regular grid
-        grid_y = grid_y.unsqueeze(1)
+        # x coordinates of a regular grid, b x 1 x h x w
+        base_grid_x = self.grid_X.expand(b, h, w)
+        base_grid_x = base_grid_x.unsqueeze(1)
+        # y coordinates of a regular grid
+        base_grid_y = self.grid_Y.expand(b, h, w)
+        base_grid_y = base_grid_y.unsqueeze(1)
 
         if self.beta is not None:
             grid_x, grid_y = self.kernel_soft_argmax(corr)
@@ -234,15 +236,16 @@ class FindCorrespondence(nn.Module):
             grid_y = idx // w
             grid_y = (grid_y.float() / (h - 1) - 0.5) * 2
 
-        grid = torch.cat(
-            (grid_x.permute(0, 2, 3, 1), grid_y.permute(0, 2, 3, 1)), dim=3)
         # 2-channels@3rd-dim, first channel for x / second channel for y
-        flow = torch.cat(
-            (grid_x - grid_x, grid_y - grid_y), dim=1)
+        grid = torch.cat(
+            [grid_x.permute(0, 2, 3, 1), grid_y.permute(0, 2, 3, 1)],
+            dim=3)
         # 2-channels@1st-dim, first channel for x / second channel for y
+        flow = torch.cat(
+            [grid_x - base_grid_x, grid_y - base_grid_y],
+            dim=1)
 
         if gt_mask is None:
-            # test
             return grid, flow
 
         smoothness = self.get_flow_smoothness(flow, gt_mask)

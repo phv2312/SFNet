@@ -14,6 +14,7 @@ class LossFunctions(nn.Module):
         l1s = []
         l2s = []
         l3s = []
+
         for mask_id in range(n_mask):
             k = 1.
             if mask_id == (n_mask - 1):
@@ -42,7 +43,12 @@ class LossFunctions(nn.Module):
             l2s += [l2 * k]
             l3s += [l3 * k]
 
-        return torch.stack(losses).mean(), torch.stack(l1s).mean(), torch.stack(l2s).mean(), torch.stack(l3s).mean()
+        return (
+            torch.stack(losses).mean(),
+            torch.stack(l1s).mean(),
+            torch.stack(l2s).mean(),
+            torch.stack(l3s).mean(),
+        )
 
 
 class LossFunction(nn.Module):
@@ -78,7 +84,9 @@ class LossFunction(nn.Module):
         l3 = torch.sum(output["smoothness_S2T"] / src_num_fgnd) +\
             torch.sum(output["smoothness_T2S"] / tgt_num_fgnd)
 
-        return (self.lambda1 * l1 + self.lambda2 * l2 + self.lambda3 * l3) / _GT_src_mask.size(0), \
-            l1 * self.lambda1 / _GT_src_mask.size(0), \
-            l2 * self.lambda2 / _GT_src_mask.size(0), \
-            l3 * self.lambda3 / _GT_src_mask.size(0)
+        return (
+            (self.lambda1 * l1 + self.lambda2 * l2 + self.lambda3 * l3) / _GT_src_mask.size(0),
+            l1 * self.lambda1 / _GT_src_mask.size(0),
+            l2 * self.lambda2 / _GT_src_mask.size(0),
+            l3 * self.lambda3 / _GT_src_mask.size(0),
+        )
