@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=None, help="random seed")
     parser.add_argument("--batch_size", type=int, default=1, help="mini-batch size for training")
     parser.add_argument("--epochs", type=int, default=50, help="number of epochs for training")
-    parser.add_argument("--lr", type=float, default=3e-5, help="learning rate")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--gamma", type=float, default=0.2, help="decaying factor")
     parser.add_argument("--decay_schedule", type=str, default="30", help="learning rate decaying schedule")
     parser.add_argument("--num_workers", type=int, default=8, help="number of workers for data loader")
