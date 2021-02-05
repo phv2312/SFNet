@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=None, help="random seed")
     parser.add_argument("--batch_size", type=int, default=1, help="mini-batch size for training")
     parser.add_argument("--epochs", type=int, default=50, help="number of epochs for training")
-    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--lr", type=float, default=3e-5, help="learning rate")
     parser.add_argument("--gamma", type=float, default=0.2, help="decaying factor")
     parser.add_argument("--decay_schedule", type=str, default="30", help="learning rate decaying schedule")
     parser.add_argument("--num_workers", type=int, default=8, help="number of workers for data loader")
@@ -67,7 +67,6 @@ def _init_fn(worker_id):
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
-    return
 
 
 def log(text, logger_file):
@@ -81,9 +80,10 @@ def log(text, logger_file):
 def main(args):
     logger_file = "./training_log.txt"
     weight_path = "./weights/best_checkpoint.pt"
+    trained_weight_path = "./weights/base_checkpoint.pt"
+
     if os.path.exists(logger_file):
         os.remove(logger_file)
-
     if not os.path.exists("./weights/"):
         os.mkdir("./weights/")
 
@@ -113,9 +113,9 @@ def main(args):
     net = SFNet(args.feature_h, args.feature_w, beta=args.beta, kernel_sigma=args.kernel_sigma)
 
     # Load pre-trained weight
-    if os.path.exists(weight_path):
+    if os.path.exists(trained_weight_path):
         try:
-            best_weights = torch.load(weight_path, map_location="cpu")
+            best_weights = torch.load(trained_weight_path, map_location="cpu")
             adap3_dict = best_weights["state_dict1"]
             adap4_dict = best_weights["state_dict2"]
             net.adap_layer_feat3.load_state_dict(adap3_dict, strict=False)

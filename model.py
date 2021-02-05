@@ -8,7 +8,7 @@ from torch.autograd import Variable
 from torch.utils.data.dataset import Dataset
 
 
-# some parts of codes are from 'https://github.com/ignacio-rocco/weakalign'
+# some parts of codes are from "https://github.com/ignacio-rocco/weakalign"
 
 
 class FeatureExtraction(nn.Module):
@@ -16,19 +16,19 @@ class FeatureExtraction(nn.Module):
         super(FeatureExtraction, self).__init__()
         self.model = models.resnet101(pretrained=True)
         resnet_feature_layers = [
-            'conv1',
-            'bn1',
-            'relu',
-            'maxpool',
-            'layer1',
-            'layer2',
-            'layer3',
-            'layer4',
+            "conv1",
+            "bn1",
+            "relu",
+            "maxpool",
+            "layer1",
+            "layer2",
+            "layer3",
+            "layer4",
         ]
-        layer1 = 'layer1'
-        layer2 = 'layer2'
-        layer3 = 'layer3'
-        layer4 = 'layer4'
+        layer1 = "layer1"
+        layer2 = "layer2"
+        layer3 = "layer3"
+        layer4 = "layer4"
         layer1_idx = resnet_feature_layers.index(layer1)
         layer2_idx = resnet_feature_layers.index(layer2)
         layer3_idx = resnet_feature_layers.index(layer3)
@@ -210,7 +210,8 @@ class FindCorrespondence(nn.Module):
         # (padLeft, padRight, padTop, padBottom)
         flow_dy = F.conv2d(F.pad(flow, [0, 0, 1, 1]), self.dy_kernel) / 2
 
-        flow_dx = torch.abs(flow_dx) * gt_mask  # consider foreground regions only
+        flow_dx = torch.abs(flow_dx) * gt_mask
+        # consider foreground regions only
         flow_dy = torch.abs(flow_dy) * gt_mask
 
         smoothness = torch.cat((flow_dx, flow_dy), 1)
@@ -275,9 +276,9 @@ class SFNet(nn.Module):
         src_feat3 = self.adap_layer_feat3(src_feat3)
         tgt_feat3 = self.adap_layer_feat3(tgt_feat3)
         src_feat4 = self.adap_layer_feat4(src_feat4)
-        src_feat4 = F.interpolate(src_feat4, scale_factor=2, mode='bilinear', align_corners=True)
+        src_feat4 = F.interpolate(src_feat4, scale_factor=2, mode="bilinear", align_corners=True)
         tgt_feat4 = self.adap_layer_feat4(tgt_feat4)
-        tgt_feat4 = F.interpolate(tgt_feat4, scale_factor=2, mode='bilinear', align_corners=True)
+        tgt_feat4 = F.interpolate(tgt_feat4, scale_factor=2, mode="bilinear", align_corners=True)
 
         # Correlation S2T
         corr_feat3 = self.matching_layer(src_feat3, tgt_feat3)  # channel : target / spatial grid : source
@@ -298,25 +299,25 @@ class SFNet(nn.Module):
             # Establish correspondences
             grid_s2t, flow_s2t = self.find_correspondence(corr_s2t)
             grid_t2s, flow_t2s = self.find_correspondence(corr_t2s)
-            return {'grid_S2T': grid_s2t, 'grid_T2S': grid_t2s, 'flow_S2T': flow_s2t, 'flow_T2S': flow_t2s}
+            return {"grid_S2T": grid_s2t, "grid_T2S": grid_t2s, "flow_S2T": flow_s2t, "flow_T2S": flow_t2s}
 
         # Establish correspondences
         grid_s2t, flow_s2t, smoothness_s2t = self.find_correspondence(corr_s2t, gt_src_mask)
         grid_t2s, flow_t2s, smoothness_t2s = self.find_correspondence(corr_t2s, gt_tgt_mask)
 
         # Estimate warped masks
-        warped_src_mask = F.grid_sample(gt_tgt_mask, grid_s2t, mode='bilinear')
-        warped_tgt_mask = F.grid_sample(gt_src_mask, grid_t2s, mode='bilinear')
+        warped_src_mask = F.grid_sample(gt_tgt_mask, grid_s2t, mode="bilinear")
+        warped_tgt_mask = F.grid_sample(gt_src_mask, grid_t2s, mode="bilinear")
 
         # Estimate warped flows
-        warped_flow_s2t = -F.grid_sample(flow_t2s, grid_s2t, mode='bilinear') * gt_src_mask
-        warped_flow_t2s = -F.grid_sample(flow_s2t, grid_t2s, mode='bilinear') * gt_tgt_mask
+        warped_flow_s2t = -F.grid_sample(flow_t2s, grid_s2t, mode="bilinear") * gt_src_mask
+        warped_flow_t2s = -F.grid_sample(flow_s2t, grid_t2s, mode="bilinear") * gt_tgt_mask
         flow_s2t = flow_s2t * gt_src_mask
         flow_t2s = flow_t2s * gt_tgt_mask
 
         return {
-            'est_src_mask': warped_src_mask, 'smoothness_S2T': smoothness_s2t, 'grid_S2T': grid_s2t,
-            'est_tgt_mask': warped_tgt_mask, 'smoothness_T2S': smoothness_t2s, 'grid_T2S': grid_t2s,
-            'flow_S2T': flow_s2t, 'flow_T2S': flow_t2s,
-            'warped_flow_S2T': warped_flow_s2t, 'warped_flow_T2S': warped_flow_t2s,
+            "est_src_mask": warped_src_mask, "smoothness_S2T": smoothness_s2t, "grid_S2T": grid_s2t,
+            "est_tgt_mask": warped_tgt_mask, "smoothness_T2S": smoothness_t2s, "grid_T2S": grid_t2s,
+            "flow_S2T": flow_s2t, "flow_T2S": flow_t2s,
+            "warped_flow_S2T": warped_flow_s2t, "warped_flow_T2S": warped_flow_t2s,
         }

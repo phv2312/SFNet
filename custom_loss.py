@@ -20,17 +20,17 @@ class LossFunctions(nn.Module):
                 k = 3.
 
             _output = {
-                'est_src_mask': output['est_src_mask'][mask_id],
-                'smoothness_S2T': output['smoothness_S2T'][mask_id],
-                'grid_S2T': output['grid_S2T'],
-                'est_tgt_mask': output['est_tgt_mask'][mask_id],
-                'smoothness_T2S': output['smoothness_T2S'][mask_id],
-                'grid_T2S': output['grid_T2S'],
-                'flow_S2T': output['flow_S2T'][mask_id],
-                'flow_T2S': output['flow_T2S'][mask_id],
-                'warped_flow_S2T': output['warped_flow_S2T'][mask_id],
-                'warped_flow_T2S': output['warped_flow_T2S'][mask_id],
-                'corr_T2S': output['corr_T2S'],
+                "est_src_mask": output["est_src_mask"][mask_id],
+                "smoothness_S2T": output["smoothness_S2T"][mask_id],
+                "grid_S2T": output["grid_S2T"],
+                "est_tgt_mask": output["est_tgt_mask"][mask_id],
+                "smoothness_T2S": output["smoothness_T2S"][mask_id],
+                "grid_T2S": output["grid_T2S"],
+                "flow_S2T": output["flow_S2T"][mask_id],
+                "flow_T2S": output["flow_T2S"][mask_id],
+                "warped_flow_S2T": output["warped_flow_S2T"][mask_id],
+                "warped_flow_T2S": output["warped_flow_T2S"][mask_id],
+                "corr_T2S": output["corr_T2S"],
             }
 
             gt_src_mask = gt_src_masks[mask_id]
@@ -48,7 +48,7 @@ class LossFunctions(nn.Module):
 class LossFunction(nn.Module):
     def __init__(self, args):
         super(LossFunction, self).__init__()
-        self.loss_fn = nn.MSELoss(reduction='sum')
+        self.loss_fn = nn.MSELoss(reduction="sum")
         self.lambda1 = args.lambda1
         self.lambda2 = args.lambda2
         self.lambda3 = args.lambda3
@@ -68,12 +68,15 @@ class LossFunction(nn.Module):
         src_num_fgnd = _GT_src_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
         tgt_num_fgnd = _GT_tgt_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
 
-        l1 = self.loss_fn(output['est_src_mask'], _GT_src_mask) / (h * w) + self.loss_fn(
-            output['est_tgt_mask'], _GT_tgt_mask) / (h * w)  # mask consistency
-        l2 = self.lossfn_two_var(output['flow_S2T'], output['warped_flow_S2T'], src_num_fgnd) +\
-            self.lossfn_two_var(output['flow_T2S'], output['warped_flow_T2S'], tgt_num_fgnd)  # flow consistency
-        l3 = torch.sum(output['smoothness_S2T'] / src_num_fgnd) + torch.sum(
-            output['smoothness_T2S'] / tgt_num_fgnd)  # smoothness
+        # mask consistency
+        l1 = self.loss_fn(output["est_src_mask"], _GT_src_mask) / (h * w) +\
+            self.loss_fn(output["est_tgt_mask"], _GT_tgt_mask) / (h * w)
+        # flow consistency
+        l2 = self.lossfn_two_var(output["flow_S2T"], output["warped_flow_S2T"], src_num_fgnd) +\
+            self.lossfn_two_var(output["flow_T2S"], output["warped_flow_T2S"], tgt_num_fgnd)
+        # smoothness
+        l3 = torch.sum(output["smoothness_S2T"] / src_num_fgnd) +\
+            torch.sum(output["smoothness_T2S"] / tgt_num_fgnd)
 
         return (self.lambda1 * l1 + self.lambda2 * l2 + self.lambda3 * l3) / _GT_src_mask.size(0), \
             l1 * self.lambda1 / _GT_src_mask.size(0), \
