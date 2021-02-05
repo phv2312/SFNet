@@ -309,12 +309,12 @@ class SFNet(nn.Module):
         grid_t2s, flow_t2s, smoothness_t2s = self.find_correspondence(corr_t2s, gt_tgt_mask)
 
         # Estimate warped masks
-        warped_src_mask = F.grid_sample(gt_tgt_mask, grid_s2t, mode="bilinear")
-        warped_tgt_mask = F.grid_sample(gt_src_mask, grid_t2s, mode="bilinear")
+        warped_src_mask = F.grid_sample(gt_tgt_mask, grid_s2t, mode="bilinear", align_corners=False)
+        warped_tgt_mask = F.grid_sample(gt_src_mask, grid_t2s, mode="bilinear", align_corners=False)
 
         # Estimate warped flows
-        warped_flow_s2t = -F.grid_sample(flow_t2s, grid_s2t, mode="bilinear") * gt_src_mask
-        warped_flow_t2s = -F.grid_sample(flow_s2t, grid_t2s, mode="bilinear") * gt_tgt_mask
+        warped_flow_s2t = -F.grid_sample(flow_t2s, grid_s2t, mode="bilinear", align_corners=False) * gt_src_mask
+        warped_flow_t2s = -F.grid_sample(flow_s2t, grid_t2s, mode="bilinear", align_corners=False) * gt_tgt_mask
         flow_s2t = flow_s2t * gt_src_mask
         flow_t2s = flow_t2s * gt_tgt_mask
 

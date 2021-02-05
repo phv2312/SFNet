@@ -247,7 +247,7 @@ def main():
 
     tensor_image = torch.from_numpy(resized_image).unsqueeze(0).permute(0, 3, 1, 2).float()
     tensor_grid = torch.from_numpy(2 * (global_rid - 0.5)).unsqueeze(0).float()
-    tensor_output_image = F.grid_sample(tensor_image, tensor_grid, mode='nearest')
+    tensor_output_image = F.grid_sample(tensor_image, tensor_grid, mode='nearest', align_corners=False)
 
     output_image = tensor_output_image.squeeze(0).permute(1, 2, 0).cpu().numpy().astype(np.uint)
     image_show(output_image)
