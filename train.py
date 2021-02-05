@@ -7,7 +7,7 @@ import torch.utils.data
 import torch.optim.lr_scheduler as lrs
 
 from geek_dataset import RandomAugmentPairAnimeDataset
-from custom_loss import loss_function
+from custom_loss import LossFunction
 from model import SFNet
 
 
@@ -127,7 +127,7 @@ def main(args):
     net.to(device)
 
     # Instantiate loss
-    criterion = loss_function(args).to(device)
+    criterion = LossFunction(args).to(device)
 
     # Instantiate optimizer
     param = list(net.adap_layer_feat3.parameters()) + list(net.adap_layer_feat4.parameters())
