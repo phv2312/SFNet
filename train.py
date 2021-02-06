@@ -6,7 +6,8 @@ import torch
 import torch.utils.data
 import torch.optim.lr_scheduler as lrs
 
-from geek_dataset import RandomAugmentPairAnimeDataset
+from loader.geek_dataset import RandomAugmentPairAnimeDataset
+from loader.multi_mask_dataset import MultiMaskAnimeDataset
 from custom_loss import LossFunction
 from model import SFNet
 
@@ -93,7 +94,7 @@ def main(args):
     w = 768
     image_size = (w, h)
 
-    train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, args.feature_h, args.feature_w)
+    train_dataset = MultiMaskAnimeDataset(root_dir, image_size, args.feature_h, args.feature_w)
     print("Dataset size:", len(train_dataset))
     train_loader = torch.utils.data.DataLoader(
         dataset=train_dataset,
@@ -165,6 +166,7 @@ def main(args):
             tgt_image = batch["image2"].to(device)
             gt_src_mask = batch["mask1"].to(device)
             gt_tgt_mask = batch["mask2"].to(device)
+            assert gt_src_mask.shape[1] == gt_tgt_mask.shape[1]
 
             output = net(src_image, tgt_image, gt_src_mask, gt_tgt_mask)
 

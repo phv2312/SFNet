@@ -151,7 +151,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         if not os.path.exists(save_path):
             mask, components = self.component_wrapper.extract_on_color_image(color_image)
-            get_component_color(components, color_image, ComponentWrapper.EXTRACT_COLOR)
+            get_component_color(components, color_image, method)
 
             mask_foreground = (mask != 0).astype(np.uint) * 255
             mask = resize_mask(mask, components, self.size).astype(np.int32)
@@ -264,9 +264,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
         # target image
         image2 = affine_transform(image2, affine2)
         mask2 = affine_transform(mask, affine2)
-
         mask = affine_transform(mask2, affine_inverse2)
-        # source mask : convert truncated pixels to 0
+        # convert truncated pixels to 0
+        # source mask
         mask1 = affine_transform(mask, affine1)
 
         image1, image2, mask1, mask2 = image1.squeeze(0).data, image2.squeeze(0).data, mask1.squeeze(
@@ -322,57 +322,3 @@ def tensor2image(tensor_input, revert=True):
         return (tensor_input[0] * 255).detach().cpu().numpy().astype(np.uint)
 
     return (tensor_input[0].permute(1, 2, 0) * 255).detach().cpu().numpy().astype(np.uint)
-
-
-def main():
-    root_dir = "/home/kan/Desktop/data_dc/hor02"
-    w = 512
-    h = 768
-    image_size = (w, h)  # (w, h)
-    mean = [2.0, 7.0, 20.0, 20.0, 10.0, 0.0, 0.0, 0.0]
-    std = [0.8, 2.0, 10.0, 10.0, 30.0, 20.0, 30.0, 1.0]
-    mean = np.array(mean)[:, np.newaxis][:, np.newaxis]
-    std = np.array(std)[:, np.newaxis][:, np.newaxis]
-
-    train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, mean, std)
-    train_loader = data.DataLoader(train_dataset, shuffle=True, batch_size=1)
-    print("n_dataset:", len(train_dataset))
-
-    train_iter = iter(train_loader)
-    for batch_id, batch_data in enumerate(train_iter):
-        image1, image2 = batch_data["image1"], batch_data["image2"]
-        mask1s, mask2s = [batch_data["mask1"]], [batch_data["mask2"]]
-
-        print("image1", image1.shape)
-        print("image2", image2.shape)
-        print("mask1s", len(mask1s))
-        print("mask2s", len(mask2s))
-
-        image1_np = tensor2image(image1)
-        image2_np = tensor2image(image2)
-
-        print("image1")
-        image_show(image1_np)
-
-        print("image2")
-        image_show(image2_np)
-
-        g_count = 0
-
-        for mask1, mask2 in zip(mask1s, mask2s):
-            print("g_count num: %d ..." % (g_count + 1))
-
-            mask1_np = tensor2image(mask1)
-            mask2_np = tensor2image(mask2)
-
-            print("mask1")
-            image_show(mask1_np)
-
-            print("mask2")
-            image_show(mask2_np)
-            g_count += 1
-    return
-
-
-if __name__ == "__main__":
-    main()

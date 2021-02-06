@@ -150,8 +150,8 @@ class FindCorrespondence(nn.Module):
         # kernels for computing gradients
         self.dx_kernel = torch.tensor([-1, 0, 1], dtype=torch.float, requires_grad=False).view(
             1, 1, 1, 3).expand(1, 2, 1, 3).to(device)
-        self.dy_kernel = torch.tensor([-1, 0, 1], dtype=torch.float, requires_grad=False).view(1, 1, 3, 1).expand(
-            1, 2, 3, 1).to(device)
+        self.dy_kernel = torch.tensor([-1, 0, 1], dtype=torch.float, requires_grad=False).view(
+            1, 1, 3, 1).expand(1, 2, 3, 1).to(device)
 
         # 1-d indices for generating Gaussian kernels
         self.x = np.linspace(0, feature_w - 1, feature_w)
@@ -181,8 +181,9 @@ class FindCorrespondence(nn.Module):
         return gauss_kernel * corr
 
     def softmax_with_temperature(self, x, beta, d=1):
-        M, _ = x.max(dim=d, keepdim=True)
-        x = x - M  # subtract maximum value for stability
+        maximum, _ = x.max(dim=d, keepdim=True)
+        # subtract maximum value for stability
+        x = x - maximum
         exp_x = torch.exp(beta * x)
         exp_x_sum = exp_x.sum(dim=d, keepdim=True)
         return exp_x / exp_x_sum
@@ -271,8 +272,8 @@ class SFNet(nn.Module):
 
     def forward(self, src_img, tgt_img, gt_src_mask=None, gt_tgt_mask=None, train=True):
         # Feature extraction
-        src_feat1, src_feat2, src_feat3, src_feat4 = self.feature_extraction(
-            src_img)  # 256,80,80 // 512,40,40 // 1024,20,20 // 2048, 10, 10
+        src_feat1, src_feat2, src_feat3, src_feat4 = self.feature_extraction(src_img)
+        # 256,80,80 // 512,40,40 // 1024,20,20 // 2048, 10, 10
         tgt_feat1, tgt_feat2, tgt_feat3, tgt_feat4 = self.feature_extraction(tgt_img)
 
         # Adaptation layers
@@ -284,15 +285,15 @@ class SFNet(nn.Module):
         tgt_feat4 = F.interpolate(tgt_feat4, scale_factor=2, mode="bilinear", align_corners=True)
 
         # Correlation S2T
-        corr_feat3 = self.matching_layer(src_feat3, tgt_feat3)  # channel : target / spatial grid : source
+        # channel : target / spatial grid : source
+        corr_feat3 = self.matching_layer(src_feat3, tgt_feat3)
         corr_feat4 = self.matching_layer(src_feat4, tgt_feat4)
         corr_s2t = corr_feat3 * corr_feat4
         corr_s2t = self.l2_normalize(corr_s2t)
 
         # Correlation T2S
         b, _, h, w = corr_feat3.size()
-        corr_feat3 = corr_feat3.view(b, h * w, h * w).transpose(1, 2).view(
-            b, h * w, h, w)
+        corr_feat3 = corr_feat3.view(b, h * w, h * w).transpose(1, 2).view(b, h * w, h, w)
         # channel : source / spatial grid : target
         corr_feat4 = corr_feat4.view(b, h * w, h * w).transpose(1, 2).view(b, h * w, h, w)
         corr_t2s = corr_feat3 * corr_feat4
@@ -304,19 +305,22 @@ class SFNet(nn.Module):
             grid_t2s, flow_t2s = self.find_correspondence(corr_t2s)
             return {"grid_S2T": grid_s2t, "grid_T2S": grid_t2s, "flow_S2T": flow_s2t, "flow_T2S": flow_t2s}
 
+        fg_src_mask = gt_src_mask[:, -1:, ...]
+        fg_tgt_mask = gt_tgt_mask[:, -1:, ...]
+
         # Establish correspondences
-        grid_s2t, flow_s2t, smoothness_s2t = self.find_correspondence(corr_s2t, gt_src_mask)
-        grid_t2s, flow_t2s, smoothness_t2s = self.find_correspondence(corr_t2s, gt_tgt_mask)
+        grid_s2t, flow_s2t, smoothness_s2t = self.find_correspondence(corr_s2t, fg_src_mask)
+        grid_t2s, flow_t2s, smoothness_t2s = self.find_correspondence(corr_t2s, fg_tgt_mask)
 
         # Estimate warped masks
         warped_src_mask = F.grid_sample(gt_tgt_mask, grid_s2t, mode="bilinear", align_corners=False)
         warped_tgt_mask = F.grid_sample(gt_src_mask, grid_t2s, mode="bilinear", align_corners=False)
 
         # Estimate warped flows
-        warped_flow_s2t = -F.grid_sample(flow_t2s, grid_s2t, mode="bilinear", align_corners=False) * gt_src_mask
-        warped_flow_t2s = -F.grid_sample(flow_s2t, grid_t2s, mode="bilinear", align_corners=False) * gt_tgt_mask
-        flow_s2t = flow_s2t * gt_src_mask
-        flow_t2s = flow_t2s * gt_tgt_mask
+        warped_flow_s2t = -F.grid_sample(flow_t2s, grid_s2t, mode="bilinear", align_corners=False) * fg_src_mask
+        warped_flow_t2s = -F.grid_sample(flow_s2t, grid_t2s, mode="bilinear", align_corners=False) * fg_tgt_mask
+        flow_s2t = flow_s2t * fg_src_mask
+        flow_t2s = flow_t2s * fg_tgt_mask
 
         return {
             "est_src_mask": warped_src_mask, "smoothness_S2T": smoothness_s2t, "grid_S2T": grid_s2t,

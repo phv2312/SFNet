@@ -1,5 +1,6 @@
 import os
 import glob
+import random
 import numpy as np
 import cv2
 import skimage.measure as measure
@@ -47,6 +48,7 @@ def build_neighbor_graph(mask):
 class ComponentWrapper:
     EXTRACT_COLOR = "extract_color"
     EXTRACT_SKETCH = "extract_sketch"
+    EXTRACT_MULTI_MASK = "extract_multi_mask"
 
     def __init__(self, min_area=10, min_size=1):
         self.min_area = min_area
@@ -143,14 +145,51 @@ class ComponentWrapper:
         components = [components[i] for i in range(0, len(components))]
         return mask, components
 
+    def extract_multi_mask_by_color(self, input_image):
+        b, g, r = cv2.split(input_image)
+        b, g, r = b.astype(np.uint64), g.astype(np.uint64), r.astype(np.uint64)
+
+        masks, components = [], []
+        # Pre-processing image
+        processed_image = b + 300 * (g + 1) + 300 * 300 * (r + 1)
+        # Get number of colors in image
+        uniques = np.unique(processed_image)
+
+        for unique in uniques:
+            # Ignore sketch (ID of background is 255)
+            if unique in self.bad_values:
+                continue
+
+            r = unique // (300 * 300) - 1
+            g = (unique % (300 * 300)) // 300 - 1
+            b = unique % 300
+
+            single_mask = (processed_image == unique).astype(np.uint8) * 255
+
+            area = np.count_nonzero(single_mask)
+            if area < self.min_area:
+                continue
+
+            component = {"color": np.array([b, g, r]), "index": len(components)}
+            masks.append(single_mask)
+            components.append(component)
+
+        foreground_mask = sum(masks)
+        masks.append(foreground_mask)
+        components.append({"color": np.array([255, 255, 255]), "index": len(components)})
+
+        return masks, components
+
     def process(self, input_image, sketch, method):
         assert len(cv2.split(input_image)) == 3, "Input image must be RGB, got binary"
-        assert method in [self.EXTRACT_COLOR, self.EXTRACT_SKETCH]
+        assert method in [self.EXTRACT_COLOR, self.EXTRACT_SKETCH, self.EXTRACT_MULTI_MASK]
 
         if method == self.EXTRACT_COLOR:
             mask, components = self.extract_on_color_image(input_image)
-        else:
+        elif method == self.EXTRACT_SKETCH:
             mask, components = self.extract_on_sketch_v3(sketch)
+        else:
+            mask, components = self.extract_multi_mask_by_color(input_image)
         return mask, components
 
 
@@ -226,41 +265,82 @@ def resize_mask(mask, components, size):
     return new_mask
 
 
+def match_multi_color_masks(masks_a, masks_b, components_a, components_b, k=None):
+    matched_masks_a, matched_masks_b = [], []
+
+    for component_a in components_a:
+        color_a = component_a["color"]
+        component_b = [b for b in components_b if np.all(b["color"] == color_a)]
+
+        if len(component_b) == 0:
+            continue
+        else:
+            component_b = component_b[0]
+
+        matched_masks_a.append(masks_a[component_a["index"]])
+        matched_masks_b.append(masks_b[component_b["index"]])
+
+    if (k is None) or (len(matched_masks_a) <= k + 1):
+        return matched_masks_a, matched_masks_b
+
+    # k is the maximum number of paired masks
+    all_indices = list(range(0, len(matched_masks_a) - 1))
+    index = random.sample(all_indices, k=k) + [len(matched_masks_a) - 1]
+
+    random_masks_a = [matched_masks_a[i] for i in index]
+    random_masks_b = [matched_masks_b[i] for i in index]
+    return random_masks_a, random_masks_b
+
+
 def main():
-    root_dir = "D:/Data/GeekToys/coloring_data/simple_data"
-    output_dir = "D:/Data/GeekToys/output/rules"
+    root_dir = "/home/tyler/work/data/GeekInt/real_data/test_data_for_interpolation_phase_1/boundary_data"
+    output_dir = "/home/tyler/work/data/GeekInt/output/mask"
 
     character_dirs = natsorted(glob.glob(os.path.join(root_dir, "*")))
-    component_wrapper = ComponentWrapper(min_area=15, min_size=3)
-
-    bug_names = natsorted(glob.glob(os.path.join("D:/Data/GeekToys/output/bug", "*.png")))
-    bug_names = [os.path.splitext(os.path.basename(path))[0] for path in bug_names]
+    component_wrapper = ComponentWrapper(min_area=400, min_size=5)
 
     for character_dir in character_dirs:
         character_name = os.path.basename(character_dir)
-        paths = natsorted(glob.glob(os.path.join(character_dir, "color", "*.tga")))
+        paths = natsorted(glob.glob(os.path.join(character_dir, "*.png")))
+        all_masks, all_components = [], []
+
+        if character_name not in ["4"]:
+            continue
+        if not os.path.exists(os.path.join(output_dir, character_name)):
+            os.mkdir(os.path.join(output_dir, character_name))
 
         for path in paths:
             name = os.path.splitext(os.path.basename(path))[0]
             full_name = "%s_%s" % (character_name, name)
             print(full_name)
 
-            if "hor01_047_k_C_C0002" not in full_name:
-                continue
+            if not os.path.exists(os.path.join(output_dir, full_name)):
+                os.mkdir(os.path.join(output_dir, full_name))
 
             color_image = cv2.cvtColor(np.array(Image.open(path).convert("RGB")), cv2.COLOR_RGB2BGR)
-            output_mask, output_components = component_wrapper.process(
-                color_image, None, ComponentWrapper.EXTRACT_COLOR)
-            get_component_color(output_components, color_image)
+            output_masks, output_components = component_wrapper.process(
+                color_image, None, ComponentWrapper.EXTRACT_MULTI_MASK)
 
-            new_mask = resize_mask(output_mask, output_components, (768, 512))
-            white_mask = np.where(output_mask == 0, np.zeros_like(output_mask), np.full_like(output_mask, 255))
-            graph = build_neighbor_graph(new_mask)
+            all_masks.append(output_masks)
+            all_components.append(output_components)
 
-            if len(np.unique(output_mask)) == len(np.unique(new_mask)):
-                print(len(np.unique(output_mask)), len(np.unique(new_mask)), output_mask.shape, new_mask.shape)
-                cv2.imwrite(os.path.join(output_dir, "%s.png" % full_name), output_mask)
-                cv2.imwrite(os.path.join(output_dir, "%s_.png" % full_name), white_mask)
+            for i, (output_mask, output_component) in enumerate(zip(output_masks, output_components)):
+                output_mask = np.stack([output_mask] * 3, axis=-1) / 255
+                component_color = output_component["color"]
+                component_color = np.tile(component_color, [output_mask.shape[0], output_mask.shape[1], 1])
+                color_mask = output_mask * component_color
+
+                write_path = os.path.join(output_dir, full_name, "%03d.png" % i)
+                cv2.imwrite(write_path, color_mask)
+
+        masks_a, components_a = all_masks[0], all_components[0]
+        masks_b, components_b = all_masks[1], all_components[1]
+        masks_a, masks_b = match_multi_color_masks(masks_a, masks_b, components_a, components_b)
+
+        for i, (mask_a, mask_b) in enumerate(zip(masks_a, masks_b)):
+            merged_mask = np.concatenate([mask_a, mask_b], axis=1)
+            write_path = os.path.join(output_dir, character_name, "%03d.png" % i)
+            cv2.imwrite(write_path, merged_mask)
     return
 
 
