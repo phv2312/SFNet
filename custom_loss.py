@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class LossFunctions(nn.Module):
+class KanLossFunction(nn.Module):
     def __init__(self, args):
-        super(LossFunctions, self).__init__()
+        super(KanLossFunction, self).__init__()
         self.loss_function = LossFunction(args)
 
     def forward(self, output, gt_src_masks, gt_tgt_masks):
@@ -67,16 +67,13 @@ class LossFunction(nn.Module):
     def forward(self, output, gt_src_mask, gt_tgt_mask):
         eps = 1
 
-        _GT_src_mask = gt_src_mask
-        _GT_tgt_mask = gt_tgt_mask
-
-        b, _, h, w = _GT_src_mask.size()
-        src_num_fgnd = _GT_src_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
-        tgt_num_fgnd = _GT_tgt_mask.sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
+        b, _, h, w = gt_src_mask.shape
+        src_num_fgnd = gt_src_mask[:, -1:, ...].sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
+        tgt_num_fgnd = gt_tgt_mask[:, -1:, ...].sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
 
         # mask consistency
-        l1 = self.loss_fn(output["est_src_mask"], _GT_src_mask) / (h * w) +\
-            self.loss_fn(output["est_tgt_mask"], _GT_tgt_mask) / (h * w)
+        l1 = self.loss_fn(output["est_src_mask"], gt_src_mask) / (h * w) +\
+            self.loss_fn(output["est_tgt_mask"], gt_tgt_mask) / (h * w)
         # flow consistency
         l2 = self.lossfn_two_var(output["flow_S2T"], output["warped_flow_S2T"], src_num_fgnd) +\
             self.lossfn_two_var(output["flow_T2S"], output["warped_flow_T2S"], tgt_num_fgnd)
@@ -85,8 +82,8 @@ class LossFunction(nn.Module):
             torch.sum(output["smoothness_T2S"] / tgt_num_fgnd)
 
         return (
-            (self.lambda1 * l1 + self.lambda2 * l2 + self.lambda3 * l3) / _GT_src_mask.size(0),
-            l1 * self.lambda1 / _GT_src_mask.size(0),
-            l2 * self.lambda2 / _GT_src_mask.size(0),
-            l3 * self.lambda3 / _GT_src_mask.size(0),
+            (self.lambda1 * l1 + self.lambda2 * l2 + self.lambda3 * l3) / b,
+            l1 * self.lambda1 / b,
+            l2 * self.lambda2 / b,
+            l3 * self.lambda3 / b,
         )
