@@ -36,7 +36,7 @@ class MultiMaskAnimeDataset(data.Dataset):
         self.paths = {}
         self.lengths = {}
 
-        self.component_wrapper = ComponentWrapper(min_area=400, min_size=5)
+        self.component_wrapper = ComponentWrapper(min_area=2000, min_size=5)
         self.matcher = ShapeMatchingWrapper()
 
         self.lengths, self.paths = self.process_input()
@@ -259,6 +259,7 @@ def main():
         gt_tgt_mask = batch["mask2"]
         assert gt_src_mask.shape[1] == gt_tgt_mask.shape[1]
         print(src_image.shape, tgt_image.shape, gt_src_mask.shape, gt_tgt_mask.shape)
+        print(torch.unique(gt_src_mask), torch.unique(gt_tgt_mask))
 
         src_image_np = tensor2image(src_image)
         tgt_image_np = tensor2image(tgt_image)
@@ -271,11 +272,11 @@ def main():
             src_mask = gt_src_mask[:, -j - 1, ...]
             tgt_mask = gt_tgt_mask[:, -j - 1, ...]
 
-            src_mask_np = tensor2image(src_mask)
-            tgt_mask_np = tensor2image(tgt_mask)
+            src_mask_np = tensor2image(src_mask, revert=False)
+            tgt_mask_np = tensor2image(tgt_mask, revert=False)
             display_mask = np.concatenate([src_mask_np, tgt_mask_np], axis=1)
 
-            print("gt mask")
+            print("gt mask", np.unique(src_mask_np), np.unique(tgt_mask_np))
             image_show(display_mask)
     return
 

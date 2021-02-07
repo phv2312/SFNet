@@ -154,6 +154,7 @@ class ComponentWrapper:
         processed_image = b + 300 * (g + 1) + 300 * 300 * (r + 1)
         # Get number of colors in image
         uniques = np.unique(processed_image)
+        foreground_mask = np.zeros_like(processed_image)
 
         for unique in uniques:
             # Ignore sketch (ID of background is 255)
@@ -165,6 +166,7 @@ class ComponentWrapper:
             b = unique % 300
 
             single_mask = (processed_image == unique).astype(np.uint8) * 255
+            foreground_mask += single_mask
 
             area = np.count_nonzero(single_mask)
             if area < self.min_area:
@@ -174,10 +176,8 @@ class ComponentWrapper:
             masks.append(single_mask)
             components.append(component)
 
-        foreground_mask = sum(masks)
         masks.append(foreground_mask)
         components.append({"color": np.array([255, 255, 255]), "index": len(components)})
-
         return masks, components
 
     def process(self, input_image, sketch, method):
