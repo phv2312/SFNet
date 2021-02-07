@@ -67,13 +67,14 @@ class LossFunction(nn.Module):
     def forward(self, output, gt_src_mask, gt_tgt_mask):
         eps = 1
 
-        b, _, h, w = gt_src_mask.shape
+        b, c, h, w = gt_src_mask.shape
+        c = c / 2
         src_num_fgnd = gt_src_mask[:, -1:, ...].sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
         tgt_num_fgnd = gt_tgt_mask[:, -1:, ...].sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
 
         # mask consistency
-        l1 = self.loss_fn(output["est_src_mask"], gt_src_mask) / (h * w) +\
-            self.loss_fn(output["est_tgt_mask"], gt_tgt_mask) / (h * w)
+        l1 = self.loss_fn(output["est_src_mask"], gt_src_mask) / (h * w * c) +\
+            self.loss_fn(output["est_tgt_mask"], gt_tgt_mask) / (h * w * c)
         # flow consistency
         l2 = self.lossfn_two_var(output["flow_S2T"], output["warped_flow_S2T"], src_num_fgnd) +\
             self.lossfn_two_var(output["flow_T2S"], output["warped_flow_T2S"], tgt_num_fgnd)
