@@ -256,7 +256,6 @@ class FindCorrespondence(nn.Module):
 class SFNet(nn.Module):
     def __init__(self, feature_h, feature_w, beta, kernel_sigma):
         super(SFNet, self).__init__()
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.feature_extraction = FeatureExtraction()
         self.adap_layer_feat3 = AdaptLayerFeat3()
         self.adap_layer_feat4 = AdaptLayerFeat4()
