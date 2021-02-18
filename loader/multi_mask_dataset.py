@@ -151,7 +151,9 @@ class MultiMaskAnimeDataset(data.Dataset):
     def from_augment(self, index, next_index, name):
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
+        color_a = self.crop_foreground_image(color_a, path_a)
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
+        color_b = self.crop_foreground_image(color_b, path_b)
 
         # extract components
         masks_a, components_a = self.get_component_mask(color_a, path_a)
