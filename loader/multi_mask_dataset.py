@@ -1,3 +1,4 @@
+import json
 from loader.geek_dataset import *
 from rules.component_wrapper import match_multi_color_masks
 
@@ -6,10 +7,13 @@ class MultiMaskAnimeDataset(data.Dataset):
     def process_input(self):
         paths = {}
         lengths = {}
+        foreground_data = {}
 
         for set_name in ["hor02"]:
             for cut_name in os.listdir(os.path.join(self.root_dir, set_name)):
                 cut_full_path = os.path.join(self.root_dir, set_name, cut_name)
+                json_path = os.path.join(self.root_dir, set_name, "foreground_data.json")
+                foreground_data.update(json.load(open(json_path)))
 
                 for root, dirs, file_paths in os.walk(cut_full_path):
                     cut_name = "_".join(root.split("/")[-2:])
@@ -26,20 +30,17 @@ class MultiMaskAnimeDataset(data.Dataset):
                     paths[cut_name]["color"] = full_path_list
                     lengths[cut_name] = len(paths[cut_name]["color"])
 
-        return lengths, paths
+        return lengths, paths, foreground_data
 
     def __init__(self, root_dir, size, feature_h=32, feature_w=48):
         super(MultiMaskAnimeDataset, self).__init__()
         self.root_dir = root_dir
         self.size = size
 
-        self.paths = {}
-        self.lengths = {}
-
         self.component_wrapper = ComponentWrapper(min_area=2000, min_size=5)
         self.matcher = ShapeMatchingWrapper()
 
-        self.lengths, self.paths = self.process_input()
+        self.lengths, self.paths, self.foreground_data = self.process_input()
         self.feature_h = feature_h  # height of feature volume
         self.feature_w = feature_w  # width of feature volume
 
@@ -74,6 +75,16 @@ class MultiMaskAnimeDataset(data.Dataset):
             total += count
         return total
 
+    def crop_foreground_image(self, color_image, path):
+        cut_name = os.path.basename(os.path.dirname(os.path.dirname(path)))
+        name = os.path.splitext(os.path.basename(path))[0]
+        full_name = "%s_%s" % (cut_name, name)
+
+        if full_name in self.foreground_data:
+            box = self.foreground_data[full_name]
+            color_image = color_image[box[1]:box[3], box[0]:box[2]]
+        return color_image
+
     def get_component_mask(self, color_image, path):
         method = ComponentWrapper.EXTRACT_MULTI_MASK
 
@@ -98,7 +109,9 @@ class MultiMaskAnimeDataset(data.Dataset):
 
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
+        color_a = self.crop_foreground_image(color_a, path_a)
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
+        color_b = self.crop_foreground_image(color_b, path_b)
 
         if len(color_a) < 3:
             color_a = cv2.cvtColor(color_a, cv2.COLOR_GRAY2BGR)
