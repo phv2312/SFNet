@@ -68,7 +68,7 @@ class LossFunction(nn.Module):
         eps = 1
 
         b, c, h, w = gt_src_mask.shape
-        c = c / 2
+        c = c / 2 if c > 1 else 1.0
         src_num_fgnd = gt_src_mask[:, -1:, ...].sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
         tgt_num_fgnd = gt_tgt_mask[:, -1:, ...].sum(dim=3, keepdim=True).sum(dim=2, keepdim=True) + eps
 
