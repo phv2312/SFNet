@@ -235,9 +235,10 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
         # resize
         mask = self.mask_transform1(mask).unsqueeze(0)
 
+        k_theta = 0.04
         # generate source image/mask
         theta1 = np.zeros(9)
-        theta1[0:6] = np.random.randn(6) * 0.1
+        theta1[0:6] = np.random.randn(6) * k_theta
         theta1 = theta1 + np.array([1, 0, 0, 0, 1, 0, 0, 0, 1])
         affine1 = np.reshape(theta1, (3, 3))
         affine_inverse1 = np.linalg.inv(affine1)
@@ -254,7 +255,7 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         # generate target image/mask
         theta2 = np.zeros(9)
-        theta2[0:6] = np.random.randn(6) * 0.15
+        theta2[0:6] = np.random.randn(6) * k_theta * 1.5
         theta2 = theta2 + np.array([1, 0, 0, 0, 1, 0, 0, 0, 1])
         affine2 = np.reshape(theta2, (3, 3))
         affine_inverse2 = np.linalg.inv(affine2)

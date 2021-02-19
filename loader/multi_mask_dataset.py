@@ -164,9 +164,10 @@ class MultiMaskAnimeDataset(data.Dataset):
         masks = masks[:9] + masks[-1:]
         masks = [self.mask_transform1(m).unsqueeze(0) for m in masks]
 
+        k_theta = 0.04
         # generate source image/mask
         theta1 = np.zeros(9)
-        theta1[0:6] = np.random.randn(6) * 0.1
+        theta1[0:6] = np.random.randn(6) * k_theta
         theta1 = theta1 + np.array([1, 0, 0, 0, 1, 0, 0, 0, 1])
         affine1 = np.reshape(theta1, (3, 3))
         affine_inverse1 = np.linalg.inv(affine1)
@@ -183,7 +184,7 @@ class MultiMaskAnimeDataset(data.Dataset):
 
         # generate target image/mask
         theta2 = np.zeros(9)
-        theta2[0:6] = np.random.randn(6) * 0.15
+        theta2[0:6] = np.random.randn(6) * k_theta * 1.5
         theta2 = theta2 + np.array([1, 0, 0, 0, 1, 0, 0, 0, 1])
         affine2 = np.reshape(theta2, (3, 3))
         affine_inverse2 = np.linalg.inv(affine2)
@@ -249,8 +250,8 @@ def main():
     w = 768
     image_size = (w, h)
 
-    train_dataset = MultiMaskAnimeDataset(root_dir, image_size, 32, 48)
-    train_loader = torch.utils.data.DataLoader(
+    train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, 32, 48)
+    train_loader = data.DataLoader(
         dataset=train_dataset,
         batch_size=1,
         shuffle=True,
