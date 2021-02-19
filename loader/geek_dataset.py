@@ -2,6 +2,7 @@ import os
 import glob
 import random
 import pickle
+import json
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
@@ -55,30 +56,16 @@ def affine_transform(x, theta):
 
 
 class RandomAugmentPairAnimeDataset(data.Dataset):
-    def process_input_old(self, root_dir):
-        dirs = natsorted(glob.glob(os.path.join(root_dir, "*")))
+    def process_input(self):
         paths = {}
         lengths = {}
-        for sub_dir in dirs:
-            dir_name = os.path.basename(sub_dir)
-            paths[dir_name] = {}
-
-            for set_name in ["sketch", "color"]:
-                paths = []
-                for sub_type in ["png", "jpg", "tga"]:
-                    paths.extend(glob.glob(os.path.join(sub_dir, set_name, "*.%s" % sub_type)))
-                paths[dir_name][set_name] = natsorted(paths)
-
-            lengths[dir_name] = len(paths[dir_name]["color"])
-        return lengths, paths
-
-    def process_input_new(self, root_dir):
-        paths = {}
-        lengths = {}
+        foreground_data = {}
 
         for set_name in ["hor02"]:
-            for cut_name in os.listdir(os.path.join(root_dir, set_name)):
-                cut_full_path = os.path.join(root_dir, set_name, cut_name)
+            for cut_name in os.listdir(os.path.join(self.root_dir, set_name)):
+                cut_full_path = os.path.join(self.root_dir, set_name, cut_name)
+                json_path = os.path.join(self.root_dir, set_name, "foreground_data.json")
+                foreground_data.update(json.load(open(json_path)))
 
                 for root, dirs, file_paths in os.walk(cut_full_path):
                     cut_name = "_".join(root.split("/")[-2:])
@@ -95,20 +82,17 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
                     paths[cut_name]["color"] = full_path_list
                     lengths[cut_name] = len(paths[cut_name]["color"])
 
-        return lengths, paths
+        return lengths, paths, foreground_data
 
     def __init__(self, root_dir, size, feature_h=32, feature_w=48):
         super(RandomAugmentPairAnimeDataset, self).__init__()
         self.root_dir = root_dir
         self.size = size
 
-        self.paths = {}
-        self.lengths = {}
-
         self.component_wrapper = ComponentWrapper(min_area=10, min_size=3)
         self.matcher = ShapeMatchingWrapper()
 
-        self.lengths, self.paths = self.process_input_new(root_dir)
+        self.lengths, self.paths, self.foreground_data = self.process_input()
         self.feature_h = feature_h  # height of feature volume
         self.feature_w = feature_w  # width of feature volume
 
@@ -143,6 +127,16 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
             total += count
         return total
 
+    def crop_foreground_image(self, color_image, path):
+        cut_name = os.path.basename(os.path.dirname(os.path.dirname(path)))
+        name = os.path.splitext(os.path.basename(path))[0]
+        full_name = "%s_%s" % (cut_name, name)
+
+        if full_name in self.foreground_data:
+            box = self.foreground_data[full_name]
+            color_image = color_image[box[1]:box[3], box[0]:box[2]]
+        return color_image
+
     def get_component_mask(self, color_image, path):
         method = ComponentWrapper.EXTRACT_COLOR
 
@@ -171,7 +165,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
+        color_a = self.crop_foreground_image(color_a, path_a)
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
+        color_b = self.crop_foreground_image(color_b, path_b)
 
         if len(color_a) < 3:
             color_a = cv2.cvtColor(color_a, cv2.COLOR_GRAY2BGR)
@@ -207,7 +203,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
     def from_augment(self, index, next_index, name):
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
+        color_a = self.crop_foreground_image(color_a, path_a)
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
+        color_b = self.crop_foreground_image(color_b, path_b)
 
         # extract components
         mask_foreground_a, mask_a = self.get_component_mask(color_a, path_a)

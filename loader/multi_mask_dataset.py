@@ -1,4 +1,3 @@
-import json
 from loader.geek_dataset import *
 from rules.component_wrapper import match_multi_color_masks
 
