@@ -48,6 +48,20 @@ def draw_component_image(components, mask):
     cv2.imwrite("%d.png" % len(components), image)
 
 
+def crop_foreground_image(foreground_data, color_image, path):
+    cut_name = os.path.basename(os.path.dirname(os.path.dirname(path)))
+    part_name = os.path.basename(os.path.dirname(path))
+    name = os.path.splitext(os.path.basename(path))[0]
+
+    key_name = "%s_%s" % (cut_name, part_name)
+    full_name = "%s_%s" % (cut_name, name)
+
+    if key_name in foreground_data:
+        box = foreground_data[key_name]
+        color_image = color_image[box[1]:box[3], box[0]:box[2]]
+    return color_image
+
+
 def affine_transform(x, theta):
     theta = theta.view(-1, 2, 3)
     grid = F.affine_grid(theta, x.size(), align_corners=False)
@@ -127,16 +141,6 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
             total += count
         return total
 
-    def crop_foreground_image(self, color_image, path):
-        cut_name = os.path.basename(os.path.dirname(os.path.dirname(path)))
-        name = os.path.splitext(os.path.basename(path))[0]
-        full_name = "%s_%s" % (cut_name, name)
-
-        if full_name in self.foreground_data:
-            box = self.foreground_data[full_name]
-            color_image = color_image[box[1]:box[3], box[0]:box[2]]
-        return color_image
-
     def get_component_mask(self, color_image, path):
         method = ComponentWrapper.EXTRACT_COLOR
 
@@ -165,9 +169,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
 
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
-        color_a = self.crop_foreground_image(color_a, path_a)
+        color_a = crop_foreground_image(self.foreground_data, color_a, path_a)
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
-        color_b = self.crop_foreground_image(color_b, path_b)
+        color_b = crop_foreground_image(self.foreground_data, color_b, path_b)
 
         if len(color_a) < 3:
             color_a = cv2.cvtColor(color_a, cv2.COLOR_GRAY2BGR)
@@ -203,9 +207,9 @@ class RandomAugmentPairAnimeDataset(data.Dataset):
     def from_augment(self, index, next_index, name):
         # read images
         color_a, path_a = get_image_by_index(self.paths[name]["color"], index)
-        color_a = self.crop_foreground_image(color_a, path_a)
+        color_a = crop_foreground_image(self.foreground_data, color_a, path_a)
         color_b, path_b = get_image_by_index(self.paths[name]["color"], next_index)
-        color_b = self.crop_foreground_image(color_b, path_b)
+        color_b = crop_foreground_image(self.foreground_data, color_b, path_b)
 
         # extract components
         mask_foreground_a, mask_a = self.get_component_mask(color_a, path_a)
