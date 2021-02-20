@@ -94,7 +94,7 @@ def main(args):
     w = 768
     image_size = (w, h)
 
-    train_dataset = RandomAugmentPairAnimeDataset(root_dir, image_size, args.feature_h, args.feature_w)
+    train_dataset = MultiMaskAnimeDataset(root_dir, image_size, args.feature_h, args.feature_w)
     print("Dataset size:", len(train_dataset))
     train_loader = torch.utils.data.DataLoader(
         dataset=train_dataset,

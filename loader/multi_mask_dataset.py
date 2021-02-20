@@ -164,7 +164,7 @@ class MultiMaskAnimeDataset(data.Dataset):
         masks = masks[:9] + masks[-1:]
         masks = [self.mask_transform1(m).unsqueeze(0) for m in masks]
 
-        k_theta = 0.04
+        k_theta = 0.06
         # generate source image/mask
         theta1 = np.zeros(9)
         theta1[0:6] = np.random.randn(6) * k_theta
